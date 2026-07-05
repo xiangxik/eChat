@@ -6,7 +6,7 @@ spring:
     name: chatbot-service
   datasource:
     url: jdbc:postgresql://${DB_HOST:localhost}:${DB_PORT:5432}/${DB_NAME:echat}
-    username: ${DB_USERNAME:echat}
+    username: ${DB_USERNAME:postgres}
     password: ${DB_PASSWORD:Test.132}
   jpa:
     hibernate:

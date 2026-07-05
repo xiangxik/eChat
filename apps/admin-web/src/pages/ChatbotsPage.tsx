@@ -16,7 +16,6 @@ export function ChatbotsPage() {
   const [drawerOpen, setDrawerOpen] = useState(false);
 
   const chatbotsQuery = useQuery({ queryKey: ['chatbots'], queryFn: adminApi.listChatbots });
-  const modelsQuery = useQuery({ queryKey: ['models'], queryFn: adminApi.listModels });
   const policiesQuery = useQuery({ queryKey: ['context-policies'], queryFn: adminApi.listContextPolicies });
   const invalidateChatbots = () => queryClient.invalidateQueries({ queryKey: ['chatbots'] });
 
@@ -47,13 +46,12 @@ export function ChatbotsPage() {
     onError: (error) => message.error(error instanceof Error ? error.message : 'Update failed'),
   });
 
-  const modelNameById = new Map((modelsQuery.data ?? []).map((model) => [model.id, model.displayName]));
   const policyNameById = new Map((policiesQuery.data ?? []).map((policy) => [policy.id, policy.name]));
 
   const openCreate = () => {
     setEditingChatbot(undefined);
     form.resetFields();
-    form.setFieldsValue({ enabled: true, defaultModelId: undefined, contextPolicyId: undefined });
+    form.setFieldsValue({ enabled: true, contextPolicyId: undefined });
     setDrawerOpen(true);
   };
 
@@ -67,12 +65,6 @@ export function ChatbotsPage() {
   const columns: ColumnsType<ChatbotConfig> = [
     { title: 'Name', dataIndex: 'name', width: 220 },
     { title: 'Description', dataIndex: 'description', ellipsis: true, render: (value?: string) => value || '-' },
-    {
-      title: 'Default Model',
-      dataIndex: 'defaultModelId',
-      width: 220,
-      render: (id?: number) => (id ? modelNameById.get(id) ?? `#${id}` : '-'),
-    },
     {
       title: 'Context Policy',
       dataIndex: 'contextPolicyId',
@@ -110,7 +102,7 @@ export function ChatbotsPage() {
 
   return (
     <div className="page-stack">
-      <ErrorAlert error={chatbotsQuery.error ?? modelsQuery.error ?? policiesQuery.error} />
+      <ErrorAlert error={chatbotsQuery.error ?? policiesQuery.error} />
       <Card
         title="Chatbot Management"
         extra={
@@ -121,11 +113,11 @@ export function ChatbotsPage() {
       >
         <Table
           rowKey="id"
-          loading={chatbotsQuery.isLoading || modelsQuery.isLoading || policiesQuery.isLoading}
+          loading={chatbotsQuery.isLoading || policiesQuery.isLoading}
           dataSource={chatbotsQuery.data ?? []}
           columns={columns}
           locale={{ emptyText: renderEmpty('No chatbots configured') }}
-          scroll={{ x: 1260 }}
+          scroll={{ x: 1040 }}
         />
       </Card>
       <Drawer
@@ -146,14 +138,6 @@ export function ChatbotsPage() {
           </Form.Item>
           <Form.Item name="description" label="Description">
             <Input.TextArea rows={3} />
-          </Form.Item>
-          <Form.Item name="defaultModelId" label="Default Model">
-            <Select
-              allowClear
-              showSearch
-              optionFilterProp="label"
-              options={(modelsQuery.data ?? []).map((model) => ({ label: `${model.displayName} (${model.modelName})`, value: model.id }))}
-            />
           </Form.Item>
           <Form.Item name="contextPolicyId" label="Context Policy">
             <Select
@@ -176,7 +160,6 @@ function normalizeChatbot(values: ChatbotConfigRequest): ChatbotConfigRequest {
   return {
     name: values.name,
     description: values.description || undefined,
-    defaultModelId: values.defaultModelId,
     contextPolicyId: values.contextPolicyId,
     enabled: values.enabled,
   };

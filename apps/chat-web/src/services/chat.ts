@@ -79,6 +79,7 @@ export function useChatSession({ chatbotId, chatbotName }: ChatSessionOptions) {
       if (!activeConversation) {
         const createdConversation = await createConversationMutation.mutateAsync({
           chatbotId,
+          anonymousSessionId: getAnonymousSessionId(),
           title: createConversationTitle(message),
           metadata: { source: 'chat-web' },
         });
@@ -257,6 +258,18 @@ function toMessageView(message: ChatMessage): ChatMessageView {
 function createConversationTitle(message: string): string {
   const normalized = message.replace(/\s+/g, ' ').trim();
   return normalized.length > 64 ? `${normalized.slice(0, 61)}...` : normalized;
+}
+
+function getAnonymousSessionId(): string {
+  const storageKey = 'echat.anonymousSessionId';
+  const existingSessionId = globalThis.localStorage?.getItem(storageKey);
+  if (existingSessionId) {
+    return existingSessionId;
+  }
+
+  const sessionId = globalThis.crypto?.randomUUID?.() ?? `anon-${Date.now()}-${Math.random().toString(36).slice(2)}`;
+  globalThis.localStorage?.setItem(storageKey, sessionId);
+  return sessionId;
 }
 
 function createClientId(prefix: string): string {

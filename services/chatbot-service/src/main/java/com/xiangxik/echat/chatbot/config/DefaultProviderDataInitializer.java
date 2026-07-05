@@ -8,19 +8,17 @@ import com.xiangxik.echat.chatbot.service.DefaultProviderCatalog.ProviderSeed;
 import java.util.UUID;
 import org.springframework.boot.ApplicationArguments;
 import org.springframework.boot.ApplicationRunner;
-import org.springframework.context.annotation.Profile;
 import org.springframework.stereotype.Component;
 import org.springframework.transaction.annotation.Transactional;
 
 @Component
-@Profile("smoke")
-public class SmokeDefaultDataInitializer implements ApplicationRunner {
+public class DefaultProviderDataInitializer implements ApplicationRunner {
 
     private final ProviderConfigRepository providerConfigRepository;
     private final ApiKeyProtector apiKeyProtector;
 
-    public SmokeDefaultDataInitializer(ProviderConfigRepository providerConfigRepository,
-                                       ApiKeyProtector apiKeyProtector) {
+    public DefaultProviderDataInitializer(ProviderConfigRepository providerConfigRepository,
+                                          ApiKeyProtector apiKeyProtector) {
         this.providerConfigRepository = providerConfigRepository;
         this.apiKeyProtector = apiKeyProtector;
     }
@@ -45,6 +43,7 @@ public class SmokeDefaultDataInitializer implements ApplicationRunner {
     }
 
     private String randomApiKey(String providerName) {
-        return "sk-seed-" + providerName.toLowerCase().replaceAll("[^a-z0-9]+", "-") + UUID.randomUUID().toString().replace("-", "");
+        return "sk-seed-" + providerName.toLowerCase().replaceAll("[^a-z0-9]+", "-")
+                + UUID.randomUUID().toString().replace("-", "");
     }
 }

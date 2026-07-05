@@ -1,5 +1,6 @@
 package com.xiangxik.echat.chatbot.service;
 
+import com.xiangxik.echat.chatbot.PostgresIntegrationTest;
 import com.xiangxik.echat.chatbot.api.dto.ProviderConfigRequest;
 import com.xiangxik.echat.chatbot.api.dto.ProviderConfigResponse;
 import com.xiangxik.echat.chatbot.domain.model.ProviderConfig;
@@ -16,7 +17,7 @@ import static org.assertj.core.api.Assertions.assertThat;
 @SpringBootTest
 @ActiveProfiles("test")
 @Transactional
-class ProviderConfigServiceTest {
+class ProviderConfigServiceTest extends PostgresIntegrationTest {
 
     @Autowired
     private ProviderConfigService providerConfigService;

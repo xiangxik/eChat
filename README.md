@@ -30,13 +30,33 @@ npm install
 
 ## Run
 
+Create the local PostgreSQL databases as a PostgreSQL admin user. Flyway runs as the application user, so that user must own the database or have `CREATE` permission on the target schema.
+
+```sql
+CREATE ROLE echat LOGIN PASSWORD 'Test.132';
+CREATE DATABASE echat OWNER echat;
+CREATE DATABASE echat_smoke OWNER echat;
+
+\connect echat
+CREATE EXTENSION IF NOT EXISTS vector;
+ALTER SCHEMA public OWNER TO echat;
+GRANT USAGE, CREATE ON SCHEMA public TO echat;
+
+\connect echat_smoke
+CREATE EXTENSION IF NOT EXISTS vector;
+ALTER SCHEMA public OWNER TO echat;
+GRANT USAGE, CREATE ON SCHEMA public TO echat;
+```
+
+If the databases already exist, ensure they are owned by `echat` or run the `ALTER SCHEMA` and `GRANT` statements above in each database.
+
 Start the backend:
 
 ```bash
 mvn -f services/chatbot-service/pom.xml spring-boot:run
 ```
 
-For a local smoke run without PostgreSQL credentials, use the in-memory smoke profile.
+The backend seeds default disabled providers on startup. For an isolated smoke database, use the smoke profile against PostgreSQL. By default it connects to the `echat_smoke` database unless `DB_NAME` is set; the database must exist and have pgvector available.
 
 PowerShell:
 
@@ -76,6 +96,8 @@ Backend tests:
 ```bash
 npm run test:backend
 ```
+
+PostgreSQL-backed integration tests use Testcontainers with a pgvector PostgreSQL image. They run when Docker is available and are skipped by JUnit when Docker is unavailable.
 
 Frontend builds:
 

@@ -5,7 +5,6 @@ import com.xiangxik.echat.chatbot.api.dto.ChatbotConfigResponse;
 import com.xiangxik.echat.chatbot.domain.model.ChatbotConfig;
 import com.xiangxik.echat.chatbot.domain.repository.ChatbotConfigRepository;
 import com.xiangxik.echat.chatbot.domain.repository.ContextPolicyRepository;
-import com.xiangxik.echat.chatbot.domain.repository.ModelConfigRepository;
 import java.util.List;
 import org.springframework.stereotype.Service;
 import org.springframework.transaction.annotation.Transactional;
@@ -14,14 +13,11 @@ import org.springframework.transaction.annotation.Transactional;
 public class ChatbotConfigService {
 
     private final ChatbotConfigRepository chatbotConfigRepository;
-    private final ModelConfigRepository modelConfigRepository;
     private final ContextPolicyRepository contextPolicyRepository;
 
     public ChatbotConfigService(ChatbotConfigRepository chatbotConfigRepository,
-                                ModelConfigRepository modelConfigRepository,
                                 ContextPolicyRepository contextPolicyRepository) {
         this.chatbotConfigRepository = chatbotConfigRepository;
-        this.modelConfigRepository = modelConfigRepository;
         this.contextPolicyRepository = contextPolicyRepository;
     }
 
@@ -62,8 +58,6 @@ public class ChatbotConfigService {
     private void apply(ChatbotConfig chatbotConfig, ChatbotConfigRequest request) {
         chatbotConfig.setName(request.name());
         chatbotConfig.setDescription(request.description());
-        chatbotConfig.setDefaultModel(request.defaultModelId() == null ? null : modelConfigRepository.findById(request.defaultModelId())
-                .orElseThrow(() -> new ResourceNotFoundException("ModelConfig", request.defaultModelId())));
         chatbotConfig.setContextPolicy(request.contextPolicyId() == null ? null : contextPolicyRepository.findById(request.contextPolicyId())
                 .orElseThrow(() -> new ResourceNotFoundException("ContextPolicy", request.contextPolicyId())));
         if (request.enabled() != null) {
@@ -72,13 +66,11 @@ public class ChatbotConfigService {
     }
 
     private ChatbotConfigResponse toResponse(ChatbotConfig chatbotConfig) {
-        Long defaultModelId = chatbotConfig.getDefaultModel() == null ? null : chatbotConfig.getDefaultModel().getId();
         Long contextPolicyId = chatbotConfig.getContextPolicy() == null ? null : chatbotConfig.getContextPolicy().getId();
         return new ChatbotConfigResponse(
                 chatbotConfig.getId(),
                 chatbotConfig.getName(),
                 chatbotConfig.getDescription(),
-                defaultModelId,
                 contextPolicyId,
                 chatbotConfig.isEnabled(),
                 chatbotConfig.getCreatedAt(),

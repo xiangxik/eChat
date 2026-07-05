@@ -93,6 +93,9 @@ public class ChatRuntimeService {
     public ChatConversationCreateResponse createConversation(ChatConversationCreateRequest request,
                                                              RuntimeRequestContext context) {
         Map<String, Object> metadata = sanitizeMetadata(request.metadata());
+        if (!StringUtils.hasText(request.userId()) && !StringUtils.hasText(request.anonymousSessionId())) {
+            throw new IllegalArgumentException("Either userId or anonymousSessionId is required");
+        }
         Conversation conversation = conversationService.create(request.chatbotId(), request.userId(),
                 request.anonymousSessionId(), request.title());
         log.info("audit.chat.conversation.created requestId={} traceId={} conversationId={} chatbotId={} userIdPresent={} remoteAddress={}",
@@ -209,7 +212,8 @@ public class ChatRuntimeService {
             Conversation conversation = conversationService.get(conversationId);
             ChatbotConfig chatbot = conversation.getChatbot();
             validateChatbot(chatbot);
-            ModelConfig model = chatbot.getDefaultModel();
+            ContextPolicy contextPolicy = resolveContextPolicy(chatbot);
+            ModelConfig model = contextPolicy.getModel();
             validateModel(model);
             ProviderConfig provider = model.getProvider();
             validateProvider(provider);
@@ -217,7 +221,7 @@ public class ChatRuntimeService {
 
             Message userMessage = messageService.create(conversationId, MessageRole.USER, message,
                     tokenEstimator.estimate(message), requestMetadata(metadata, context));
-            ContextAssemblyResult contextResult = assembleContext(conversation, message, metadata, context);
+        ContextAssemblyResult contextResult = assembleContext(conversation, contextPolicy, message, metadata, context);
             LlmChatRequest llmRequest = new LlmChatRequest(contextResult.messages().stream()
                     .map(contextMessage -> new LlmChatMessage(toProviderRole(contextMessage.role()),
                             contextMessage.content(), contextMessage.metadata()))
@@ -230,10 +234,11 @@ public class ChatRuntimeService {
         });
     }
 
-    private ContextAssemblyResult assembleContext(Conversation conversation, String latestUserMessage,
-                                                  Map<String, Object> metadata, RuntimeRequestContext requestContext) {
+    private ContextAssemblyResult assembleContext(Conversation conversation, ContextPolicy contextPolicy,
+                                                  String latestUserMessage, Map<String, Object> metadata,
+                                                  RuntimeRequestContext requestContext) {
         List<Message> messages = messageService.listByConversation(conversation.getId());
-        ContextPolicyDefinition policy = resolvePolicy(conversation.getChatbot());
+        ContextPolicyDefinition policy = contextPolicyValidator.validateAndParse(contextPolicy.getDslContent());
         Map<String, Object> runtime = new LinkedHashMap<>();
         runtime.put("requestId", requestContext.requestId());
         runtime.put("traceId", requestContext.traceId());
@@ -245,12 +250,13 @@ public class ChatRuntimeService {
                 List.of(), runtime));
     }
 
-    private ContextPolicyDefinition resolvePolicy(ChatbotConfig chatbot) {
+    private ContextPolicy resolveContextPolicy(ChatbotConfig chatbot) {
         ContextPolicy contextPolicy = chatbot.getContextPolicy();
         if (contextPolicy == null || !contextPolicy.isEnabled()) {
-            return contextPolicyValidator.validateAndParse(defaultPolicy());
+            throw new ChatRuntimeException("MODEL_NOT_CONFIGURED", "Chatbot has no enabled policy model configured",
+                    HttpStatus.CONFLICT);
         }
-        return contextPolicyValidator.validateAndParse(contextPolicy.getDslContent());
+        return contextPolicy;
     }
 
     private Message saveAssistantMessage(Long conversationId, String content, RuntimeRequestContext context,
@@ -278,11 +284,11 @@ public class ChatRuntimeService {
 
     private void validateModel(ModelConfig model) {
         if (model == null) {
-            throw new ChatRuntimeException("MODEL_NOT_CONFIGURED", "Chatbot has no default model configured",
+            throw new ChatRuntimeException("MODEL_NOT_CONFIGURED", "Chatbot policy has no model configured",
                     HttpStatus.CONFLICT);
         }
         if (!model.isEnabled()) {
-            throw new ChatRuntimeException("MODEL_DISABLED", "Chatbot default model is disabled", HttpStatus.CONFLICT);
+            throw new ChatRuntimeException("MODEL_DISABLED", "Chatbot policy model is disabled", HttpStatus.CONFLICT);
         }
     }
 
@@ -375,43 +381,6 @@ public class ChatRuntimeService {
         } catch (IOException ex) {
             throw new ChatRuntimeException("STREAM_WRITE_FAILED", "Unable to write SSE event", HttpStatus.CONFLICT);
         }
-    }
-
-    private String defaultPolicy() {
-        return """
-                <contextPolicy name=\"default-runtime\" maxTokens=\"12000\">
-                  <system priority=\"100\">You are a helpful enterprise chatbot assistant.</system>
-                  <variables>
-                    <var name=\"conversation\" source=\"conversation.messages\" maxMessages=\"20\" />
-                    <var name=\"context\" source=\"context\" optional=\"true\" />
-                    <var name=\"shortTermMemory\" source=\"memory.shortTerm\" topK=\"8\" optional=\"true\" />
-                    <var name=\"longTermMemory\" source=\"memory.longTerm\" topK=\"8\" optional=\"true\" />
-                    <var name=\"userProfile\" source=\"user.profile\" optional=\"true\" />
-                    <var name=\"retrievalResults\" source=\"retrieval.results\" topK=\"6\" optional=\"true\" />
-                    <var name=\"toolResults\" source=\"tool.results\" topK=\"6\" optional=\"true\" />
-                    <var name=\"runtime\" source=\"runtime\" optional=\"true\" />
-                    <var name=\"metadata\" source=\"metadata\" optional=\"true\" />
-                  </variables>
-                  <budget>
-                    <reserve target=\"conversation\" tokens=\"7000\" />
-                  </budget>
-                  <rules>
-                    <truncate target=\"conversation\" strategy=\"oldest-first\" />
-                    <exclude target=\"metadata\" when=\"metadata.sensitive == true\" />
-                  </rules>
-                  <output>
-                    <section name=\"system\" />
-                    <section name=\"conversation\" />
-                    <section name=\"shortTermMemory\" optional=\"true\" />
-                    <section name=\"longTermMemory\" optional=\"true\" />
-                    <section name=\"userProfile\" optional=\"true\" />
-                    <section name=\"retrievalResults\" optional=\"true\" />
-                    <section name=\"toolResults\" optional=\"true\" />
-                    <section name=\"runtime\" optional=\"true\" />
-                    <section name=\"metadata\" optional=\"true\" />
-                  </output>
-                </contextPolicy>
-                """;
     }
 
     private record PreparedInvocation(

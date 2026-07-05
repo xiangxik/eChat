@@ -2,6 +2,9 @@ package com.xiangxik.echat.chatbot.domain.model;
 
 import jakarta.persistence.Column;
 import jakarta.persistence.Entity;
+import jakarta.persistence.FetchType;
+import jakarta.persistence.JoinColumn;
+import jakarta.persistence.ManyToOne;
 import jakarta.persistence.Table;
 
 @Entity
@@ -19,6 +22,10 @@ public class ContextPolicy extends AuditableEntity {
 
     @Column(name = "version", nullable = false)
     private int version = 1;
+
+    @ManyToOne(fetch = FetchType.LAZY)
+    @JoinColumn(name = "model_id")
+    private ModelConfig model;
 
     @Column(name = "enabled", nullable = false)
     private boolean enabled = true;
@@ -53,6 +60,14 @@ public class ContextPolicy extends AuditableEntity {
 
     public void setVersion(int version) {
         this.version = version;
+    }
+
+    public ModelConfig getModel() {
+        return model;
+    }
+
+    public void setModel(ModelConfig model) {
+        this.model = model;
     }
 
     public boolean isEnabled() {

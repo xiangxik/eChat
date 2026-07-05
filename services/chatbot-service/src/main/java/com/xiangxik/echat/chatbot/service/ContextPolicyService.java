@@ -6,6 +6,7 @@ import com.xiangxik.echat.chatbot.api.dto.ContextPolicyResponse;
 import com.xiangxik.echat.chatbot.api.dto.ContextPolicyValidationResponse;
 import com.xiangxik.echat.chatbot.domain.model.ContextPolicy;
 import com.xiangxik.echat.chatbot.domain.repository.ContextPolicyRepository;
+import com.xiangxik.echat.chatbot.domain.repository.ModelConfigRepository;
 import com.xiangxik.echat.chatbot.service.context.ContextAssemblyRequest;
 import com.xiangxik.echat.chatbot.service.context.ContextAssemblyResult;
 import com.xiangxik.echat.chatbot.service.context.ContextEngine;
@@ -19,13 +20,16 @@ import org.springframework.transaction.annotation.Transactional;
 public class ContextPolicyService {
 
     private final ContextPolicyRepository contextPolicyRepository;
+    private final ModelConfigRepository modelConfigRepository;
     private final ContextPolicyValidator contextPolicyValidator;
     private final ContextEngine contextEngine;
 
     public ContextPolicyService(ContextPolicyRepository contextPolicyRepository,
+                                ModelConfigRepository modelConfigRepository,
                                 ContextPolicyValidator contextPolicyValidator,
                                 ContextEngine contextEngine) {
         this.contextPolicyRepository = contextPolicyRepository;
+        this.modelConfigRepository = modelConfigRepository;
         this.contextPolicyValidator = contextPolicyValidator;
         this.contextEngine = contextEngine;
     }
@@ -87,18 +91,22 @@ public class ContextPolicyService {
         if (request.version() != null) {
             contextPolicy.setVersion(request.version());
         }
+        contextPolicy.setModel(modelConfigRepository.findById(request.modelId())
+                .orElseThrow(() -> new ResourceNotFoundException("ModelConfig", request.modelId())));
         if (request.enabled() != null) {
             contextPolicy.setEnabled(request.enabled());
         }
     }
 
     private ContextPolicyResponse toResponse(ContextPolicy contextPolicy) {
+        Long modelId = contextPolicy.getModel() == null ? null : contextPolicy.getModel().getId();
         return new ContextPolicyResponse(
                 contextPolicy.getId(),
                 contextPolicy.getName(),
                 contextPolicy.getDescription(),
                 contextPolicy.getDslContent(),
                 contextPolicy.getVersion(),
+                modelId,
                 contextPolicy.isEnabled(),
                 contextPolicy.getCreatedAt(),
                 contextPolicy.getUpdatedAt()

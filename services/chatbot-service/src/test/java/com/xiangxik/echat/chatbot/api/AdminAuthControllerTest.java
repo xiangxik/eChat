@@ -1,5 +1,6 @@
 package com.xiangxik.echat.chatbot.api;
 
+import com.xiangxik.echat.chatbot.PostgresIntegrationTest;
 import com.xiangxik.echat.chatbot.api.admin.AdminAuthController;
 import jakarta.servlet.http.Cookie;
 import org.junit.jupiter.api.BeforeEach;
@@ -26,7 +27,7 @@ import static org.springframework.test.web.servlet.result.MockMvcResultMatchers.
 @SpringBootTest
 @ActiveProfiles("test")
 @Transactional
-class AdminAuthControllerTest {
+class AdminAuthControllerTest extends PostgresIntegrationTest {
 
     private MockMvc mockMvc;
 

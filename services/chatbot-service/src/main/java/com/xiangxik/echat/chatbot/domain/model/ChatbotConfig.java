@@ -18,10 +18,6 @@ public class ChatbotConfig extends AuditableEntity {
     private String description;
 
     @ManyToOne(fetch = FetchType.LAZY)
-    @JoinColumn(name = "default_model_id")
-    private ModelConfig defaultModel;
-
-    @ManyToOne(fetch = FetchType.LAZY)
     @JoinColumn(name = "context_policy_id")
     private ContextPolicy contextPolicy;
 
@@ -42,14 +38,6 @@ public class ChatbotConfig extends AuditableEntity {
 
     public void setDescription(String description) {
         this.description = description;
-    }
-
-    public ModelConfig getDefaultModel() {
-        return defaultModel;
-    }
-
-    public void setDefaultModel(ModelConfig defaultModel) {
-        this.defaultModel = defaultModel;
     }
 
     public ContextPolicy getContextPolicy() {

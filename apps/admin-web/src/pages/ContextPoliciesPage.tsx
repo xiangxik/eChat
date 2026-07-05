@@ -12,6 +12,7 @@ import {
   InputNumber,
   List,
   Popconfirm,
+  Select,
   Space,
   Switch,
   Table,
@@ -97,6 +98,9 @@ export function ContextPoliciesPage() {
   const [previewResult, setPreviewResult] = useState<ContextAssemblyResult>();
 
   const policiesQuery = useQuery({ queryKey: ['context-policies'], queryFn: adminApi.listContextPolicies });
+  const modelsQuery = useQuery({ queryKey: ['models'], queryFn: adminApi.listModels });
+  const enabledModels = (modelsQuery.data ?? []).filter((model) => model.enabled);
+  const modelNameById = new Map((modelsQuery.data ?? []).map((model) => [model.id, `${model.displayName} (${model.modelName})`]));
   const invalidatePolicies = () => queryClient.invalidateQueries({ queryKey: ['context-policies'] });
 
   const saveMutation = useMutation({
@@ -143,7 +147,13 @@ export function ContextPoliciesPage() {
     setValidationResult(undefined);
     setPreviewResult(undefined);
     form.resetFields();
-    form.setFieldsValue({ dslContent: defaultDsl, previewJson: stringifyJson(defaultPreviewRequest), version: 1, enabled: true });
+    form.setFieldsValue({
+      dslContent: defaultDsl,
+      modelId: enabledModels[0]?.id,
+      previewJson: stringifyJson(defaultPreviewRequest),
+      version: 1,
+      enabled: true,
+    });
     setDrawerOpen(true);
   };
 
@@ -181,6 +191,7 @@ export function ContextPoliciesPage() {
   const columns: ColumnsType<ContextPolicy> = [
     { title: 'Name', dataIndex: 'name', width: 240 },
     { title: 'Description', dataIndex: 'description', ellipsis: true, render: (value) => value || '-' },
+    { title: 'Model', dataIndex: 'modelId', width: 220, render: (id?: number) => (id ? modelNameById.get(id) ?? `#${id}` : '-') },
     { title: 'Version', dataIndex: 'version', width: 100, render: (value) => <Tag>v{value}</Tag> },
     { title: 'Status', dataIndex: 'enabled', width: 130, render: (enabled) => <EnabledTag enabled={enabled} /> },
     {
@@ -213,22 +224,22 @@ export function ContextPoliciesPage() {
 
   return (
     <div className="page-stack">
-      <ErrorAlert error={policiesQuery.error} />
+      <ErrorAlert error={policiesQuery.error ?? modelsQuery.error} />
       <Card
         title="Context Policy Management"
         extra={
-          <Button type="primary" icon={<PlusOutlined />} onClick={openCreate}>
+          <Button type="primary" icon={<PlusOutlined />} onClick={openCreate} disabled={!enabledModels.length}>
             New Policy
           </Button>
         }
       >
         <Table
           rowKey="id"
-          loading={policiesQuery.isLoading}
+          loading={policiesQuery.isLoading || modelsQuery.isLoading}
           dataSource={policiesQuery.data ?? []}
           columns={columns}
-          locale={{ emptyText: renderEmpty('No context policies configured') }}
-          scroll={{ x: 1120 }}
+          locale={{ emptyText: renderEmpty(enabledModels.length ? 'No context policies configured' : 'Enable a model first') }}
+          scroll={{ x: 1340 }}
         />
       </Card>
       <Drawer
@@ -265,6 +276,13 @@ export function ContextPoliciesPage() {
                       </Form.Item>
                       <Form.Item name="description" label="Description">
                         <Input.TextArea rows={2} />
+                      </Form.Item>
+                      <Form.Item name="modelId" label="Model" rules={[{ required: true }]}>
+                        <Select
+                          showSearch
+                          optionFilterProp="label"
+                          options={enabledModels.map((model) => ({ label: `${model.displayName} (${model.modelName})`, value: model.id }))}
+                        />
                       </Form.Item>
                       <Space className="form-row" align="start">
                         <Form.Item name="version" label="Version" rules={[{ type: 'number', min: 1 }]}>
@@ -314,6 +332,7 @@ function policyToRequest(policy: ContextPolicy): ContextPolicyRequest {
     description: policy.description,
     dslContent: policy.dslContent,
     version: policy.version,
+    modelId: policy.modelId,
     enabled: policy.enabled,
   };
 }
@@ -324,6 +343,7 @@ function toPolicyRequest(values: ContextPolicyFormValues): ContextPolicyRequest 
     description: values.description || undefined,
     dslContent: values.dslContent,
     version: values.version,
+    modelId: values.modelId,
     enabled: values.enabled,
   };
 }

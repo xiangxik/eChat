@@ -8,7 +8,6 @@ public record ChatbotConfigResponse(
         Long id,
         String name,
         String description,
-        Long defaultModelId,
         Long contextPolicyId,
         boolean enabled,
         Instant createdAt,

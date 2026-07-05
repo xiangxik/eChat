@@ -1,5 +1,6 @@
 package com.xiangxik.echat.chatbot.api;
 
+import com.xiangxik.echat.chatbot.PostgresIntegrationTest;
 import com.xiangxik.echat.chatbot.api.dto.HealthResponse;
 import org.junit.jupiter.api.Test;
 import org.springframework.beans.factory.annotation.Autowired;
@@ -10,7 +11,7 @@ import static org.assertj.core.api.Assertions.assertThat;
 
 @SpringBootTest
 @ActiveProfiles("test")
-class HealthControllerTest {
+class HealthControllerTest extends PostgresIntegrationTest {
 
     @Autowired
     private HealthController healthController;

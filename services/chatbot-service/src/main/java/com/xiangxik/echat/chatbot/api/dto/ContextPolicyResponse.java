@@ -10,6 +10,7 @@ public record ContextPolicyResponse(
         String description,
         String dslContent,
         int version,
+        Long modelId,
         boolean enabled,
         Instant createdAt,
         Instant updatedAt

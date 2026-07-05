@@ -1,3 +1,15 @@
+CREATE EXTENSION IF NOT EXISTS vector;
+
+CREATE TABLE app_schema_version_marker (
+    id BIGSERIAL PRIMARY KEY,
+    marker VARCHAR(64) NOT NULL UNIQUE,
+    created_at TIMESTAMPTZ NOT NULL DEFAULT NOW()
+);
+
+INSERT INTO app_schema_version_marker (marker)
+VALUES ('phase-1-skeleton')
+ON CONFLICT (marker) DO NOTHING;
+
 CREATE TABLE provider_configs (
     id BIGSERIAL PRIMARY KEY,
     name VARCHAR(128) NOT NULL UNIQUE,
@@ -38,6 +50,7 @@ CREATE TABLE context_policies (
     description TEXT,
     dsl_content TEXT NOT NULL,
     version INTEGER NOT NULL DEFAULT 1,
+    model_id BIGINT REFERENCES model_configs(id) ON DELETE SET NULL,
     enabled BOOLEAN NOT NULL DEFAULT TRUE,
     created_at TIMESTAMPTZ NOT NULL DEFAULT NOW(),
     updated_at TIMESTAMPTZ NOT NULL DEFAULT NOW(),
@@ -48,7 +61,6 @@ CREATE TABLE chatbot_configs (
     id BIGSERIAL PRIMARY KEY,
     name VARCHAR(160) NOT NULL UNIQUE,
     description TEXT,
-    default_model_id BIGINT REFERENCES model_configs(id) ON DELETE SET NULL,
     context_policy_id BIGINT REFERENCES context_policies(id) ON DELETE SET NULL,
     enabled BOOLEAN NOT NULL DEFAULT TRUE,
     created_at TIMESTAMPTZ NOT NULL DEFAULT NOW(),
@@ -94,7 +106,7 @@ CREATE TABLE memory_items (
 );
 
 CREATE INDEX model_configs_provider_id_idx ON model_configs(provider_id);
-CREATE INDEX chatbot_configs_default_model_id_idx ON chatbot_configs(default_model_id);
+CREATE INDEX context_policies_model_id_idx ON context_policies(model_id);
 CREATE INDEX chatbot_configs_context_policy_id_idx ON chatbot_configs(context_policy_id);
 CREATE INDEX conversations_chatbot_status_updated_idx ON conversations(chatbot_id, status, updated_at DESC);
 CREATE INDEX conversations_user_updated_idx ON conversations(user_id, updated_at DESC) WHERE user_id IS NOT NULL;

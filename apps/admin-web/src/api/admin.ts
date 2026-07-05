@@ -82,7 +82,6 @@ export interface ChatbotConfig {
   id: number;
   name: string;
   description?: string;
-  defaultModelId?: number;
   contextPolicyId?: number;
   enabled: boolean;
   createdAt?: string;
@@ -92,7 +91,6 @@ export interface ChatbotConfig {
 export interface ChatbotConfigRequest {
   name: string;
   description?: string;
-  defaultModelId?: number;
   contextPolicyId?: number;
   enabled?: boolean;
 }
@@ -103,6 +101,7 @@ export interface ContextPolicy {
   description?: string;
   dslContent: string;
   version: number;
+  modelId: number;
   enabled: boolean;
   createdAt?: string;
   updatedAt?: string;
@@ -113,6 +112,7 @@ export interface ContextPolicyRequest {
   description?: string;
   dslContent: string;
   version?: number;
+  modelId: number;
   enabled?: boolean;
 }
 

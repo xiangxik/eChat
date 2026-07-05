@@ -1,5 +1,6 @@
 package com.xiangxik.echat.chatbot.domain.repository;
 
+import com.xiangxik.echat.chatbot.PostgresIntegrationTest;
 import com.xiangxik.echat.chatbot.domain.model.ChatbotConfig;
 import com.xiangxik.echat.chatbot.domain.model.ContextPolicy;
 import com.xiangxik.echat.chatbot.domain.model.Conversation;
@@ -13,6 +14,7 @@ import com.xiangxik.echat.chatbot.domain.model.ModelType;
 import com.xiangxik.echat.chatbot.domain.model.ProviderConfig;
 import com.xiangxik.echat.chatbot.domain.model.ProviderType;
 import java.util.Map;
+import java.util.UUID;
 import org.junit.jupiter.api.Test;
 import org.springframework.beans.factory.annotation.Autowired;
 import org.springframework.boot.test.context.SpringBootTest;
@@ -24,7 +26,7 @@ import static org.assertj.core.api.Assertions.assertThat;
 @SpringBootTest
 @ActiveProfiles("test")
 @Transactional
-class CoreDomainRepositoryTest {
+class CoreDomainRepositoryTest extends PostgresIntegrationTest {
 
     @Autowired
     private ProviderConfigRepository providerConfigRepository;
@@ -49,8 +51,9 @@ class CoreDomainRepositoryTest {
 
     @Test
     void persistsCoreChatbotGraphAndQueryMethods() {
+        String suffix = UUID.randomUUID().toString();
         ProviderConfig provider = new ProviderConfig();
-        provider.setName("Anthropic");
+        provider.setName("Anthropic " + suffix);
         provider.setType(ProviderType.ANTHROPIC);
         provider.setBaseUrl("https://api.anthropic.com");
         provider = providerConfigRepository.save(provider);
@@ -67,13 +70,13 @@ class CoreDomainRepositoryTest {
         model = modelConfigRepository.save(model);
 
         ContextPolicy policy = new ContextPolicy();
-        policy.setName("Default Harness");
+        policy.setName("Default Harness " + suffix);
         policy.setDslContent("<context><conversation/><retrievalResults/></context>");
+        policy.setModel(model);
         policy = contextPolicyRepository.save(policy);
 
         ChatbotConfig chatbot = new ChatbotConfig();
-        chatbot.setName("Support Bot");
-        chatbot.setDefaultModel(model);
+        chatbot.setName("Support Bot " + suffix);
         chatbot.setContextPolicy(policy);
         chatbot = chatbotConfigRepository.save(chatbot);
 

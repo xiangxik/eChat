@@ -1,5 +1,6 @@
 package com.xiangxik.echat.chatbot.config;
 
+import com.xiangxik.echat.chatbot.PostgresIntegrationTest;
 import com.xiangxik.echat.chatbot.domain.model.ProviderConfig;
 import com.xiangxik.echat.chatbot.domain.model.ProviderType;
 import com.xiangxik.echat.chatbot.domain.repository.ModelConfigRepository;
@@ -19,8 +20,8 @@ import static org.junit.jupiter.api.Assertions.assertNotNull;
 import static org.junit.jupiter.api.Assertions.assertTrue;
 
 @SpringBootTest
-@ActiveProfiles("smoke")
-class SmokeDefaultDataInitializerTest {
+@ActiveProfiles("test")
+class DefaultProviderDataInitializerTest extends PostgresIntegrationTest {
 
     @Autowired
     private ProviderConfigRepository providerConfigRepository;
@@ -36,11 +37,13 @@ class SmokeDefaultDataInitializerTest {
         Map<String, ProviderConfig> providersByName = providerConfigRepository.findAll().stream()
                 .collect(Collectors.toMap(ProviderConfig::getName, provider -> provider));
 
-        assertEquals(Set.of("Minimax Overseas", "Minimax China", "Qwen", "OpenAI", "Anthropic", "Gemini"), providersByName.keySet());
-        assertEquals(ProviderType.ANTHROPIC, providersByName.get("Minimax Overseas").getType());
-        assertEquals("https://api.minimax.io/anthropic/v1", providersByName.get("Minimax Overseas").getBaseUrl());
+        assertEquals(Set.of("Minimax Oversea", "Minimax China", "Qwen", "Claude", "OpenAI", "Gemini"), providersByName.keySet());
+        assertEquals(ProviderType.ANTHROPIC, providersByName.get("Minimax Oversea").getType());
+        assertEquals("https://api.minimax.io/anthropic/v1", providersByName.get("Minimax Oversea").getBaseUrl());
         assertEquals(ProviderType.OPENAI_COMPATIBLE, providersByName.get("Minimax China").getType());
         assertEquals("https://api.minimax.chat/v1", providersByName.get("Minimax China").getBaseUrl());
+        assertEquals(ProviderType.ANTHROPIC, providersByName.get("Claude").getType());
+        assertEquals("https://api.anthropic.com/v1", providersByName.get("Claude").getBaseUrl());
         for (ProviderConfig providerConfig : providersByName.values()) {
             assertFalse(providerConfig.isEnabled());
             assertNotNull(providerConfig.getBaseUrl());

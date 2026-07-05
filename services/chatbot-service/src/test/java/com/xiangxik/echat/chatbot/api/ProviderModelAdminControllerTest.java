@@ -1,5 +1,6 @@
 package com.xiangxik.echat.chatbot.api;
 
+import com.xiangxik.echat.chatbot.PostgresIntegrationTest;
 import com.xiangxik.echat.chatbot.domain.model.ModelConfig;
 import com.xiangxik.echat.chatbot.api.dto.ModelOptionResponse;
 import com.xiangxik.echat.chatbot.domain.model.ModelType;
@@ -42,7 +43,7 @@ import static org.springframework.test.web.servlet.result.MockMvcResultMatchers.
 @SpringBootTest
 @ActiveProfiles("test")
 @Transactional
-class ProviderModelAdminControllerTest {
+class ProviderModelAdminControllerTest extends PostgresIntegrationTest {
 
     private static final String ADMIN_TOKEN = "test-admin-token";
     private static final String API_KEY = "sk-admin-secret";

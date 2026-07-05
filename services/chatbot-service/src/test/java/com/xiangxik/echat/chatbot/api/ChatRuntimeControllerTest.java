@@ -1,11 +1,14 @@
 package com.xiangxik.echat.chatbot.api;
 
+import com.xiangxik.echat.chatbot.PostgresIntegrationTest;
 import com.xiangxik.echat.chatbot.domain.model.ChatbotConfig;
+import com.xiangxik.echat.chatbot.domain.model.ContextPolicy;
 import com.xiangxik.echat.chatbot.domain.model.ModelConfig;
 import com.xiangxik.echat.chatbot.domain.model.ModelType;
 import com.xiangxik.echat.chatbot.domain.model.ProviderConfig;
 import com.xiangxik.echat.chatbot.domain.model.ProviderType;
 import com.xiangxik.echat.chatbot.domain.repository.ChatbotConfigRepository;
+import com.xiangxik.echat.chatbot.domain.repository.ContextPolicyRepository;
 import com.xiangxik.echat.chatbot.domain.repository.MessageRepository;
 import com.xiangxik.echat.chatbot.domain.repository.ModelConfigRepository;
 import com.xiangxik.echat.chatbot.domain.repository.ProviderConfigRepository;
@@ -45,7 +48,7 @@ import static org.springframework.test.web.servlet.result.MockMvcResultMatchers.
 
 @SpringBootTest
 @ActiveProfiles("test")
-class ChatRuntimeControllerTest {
+class ChatRuntimeControllerTest extends PostgresIntegrationTest {
 
     private static final String API_KEY = "sk-runtime-secret";
 
@@ -59,6 +62,9 @@ class ChatRuntimeControllerTest {
 
     @Autowired
     private ModelConfigRepository modelConfigRepository;
+
+    @Autowired
+    private ContextPolicyRepository contextPolicyRepository;
 
     @Autowired
     private ChatbotConfigRepository chatbotConfigRepository;
@@ -221,12 +227,35 @@ class ChatRuntimeControllerTest {
         model.setEnabled(true);
         model = modelConfigRepository.saveAndFlush(model);
 
+                ContextPolicy policy = new ContextPolicy();
+                policy.setName("Runtime policy " + suffix);
+                policy.setDslContent(runtimePolicyDsl());
+                policy.setVersion(1);
+                policy.setModel(model);
+                policy.setEnabled(true);
+                policy = contextPolicyRepository.saveAndFlush(policy);
+
         ChatbotConfig chatbot = new ChatbotConfig();
         chatbot.setName("Runtime bot " + suffix);
-        chatbot.setDefaultModel(model);
+                chatbot.setContextPolicy(policy);
         chatbot.setEnabled(true);
         return chatbotConfigRepository.saveAndFlush(chatbot).getId();
     }
+
+        private String runtimePolicyDsl() {
+                return """
+                                <contextPolicy name="runtime-test" maxTokens="12000">
+                                    <system priority="100">You are a helpful test assistant.</system>
+                                    <variables>
+                                        <var name="conversation" source="conversation.messages" maxMessages="20" />
+                                    </variables>
+                                    <output>
+                                        <section name="system" />
+                                        <section name="conversation" />
+                                    </output>
+                                </contextPolicy>
+                                """;
+        }
 
     private Long createConversation(Long chatbotId) throws Exception {
         String response = mockMvc.perform(post("/api/chat/conversations")

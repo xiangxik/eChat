@@ -1,9 +1,18 @@
 package com.xiangxik.echat.chatbot.api;
 
 import com.fasterxml.jackson.databind.ObjectMapper;
+import com.xiangxik.echat.chatbot.PostgresIntegrationTest;
+import com.xiangxik.echat.chatbot.domain.model.ModelConfig;
+import com.xiangxik.echat.chatbot.domain.model.ModelType;
+import com.xiangxik.echat.chatbot.domain.model.ProviderConfig;
+import com.xiangxik.echat.chatbot.domain.model.ProviderType;
+import com.xiangxik.echat.chatbot.domain.repository.ModelConfigRepository;
+import com.xiangxik.echat.chatbot.domain.repository.ProviderConfigRepository;
+import com.xiangxik.echat.chatbot.service.ApiKeyProtector;
 import java.util.LinkedHashMap;
 import java.util.List;
 import java.util.Map;
+import java.util.UUID;
 import org.junit.jupiter.api.BeforeEach;
 import org.junit.jupiter.api.Test;
 import org.springframework.beans.factory.annotation.Autowired;
@@ -24,7 +33,7 @@ import static org.springframework.test.web.servlet.result.MockMvcResultMatchers.
 @SpringBootTest
 @ActiveProfiles("test")
 @Transactional
-class ContextPolicyAdminControllerTest {
+class ContextPolicyAdminControllerTest extends PostgresIntegrationTest {
 
     private static final String ADMIN_TOKEN = "test-admin-token";
 
@@ -34,6 +43,15 @@ class ContextPolicyAdminControllerTest {
     @Autowired
     private WebApplicationContext webApplicationContext;
 
+        @Autowired
+        private ProviderConfigRepository providerConfigRepository;
+
+        @Autowired
+        private ModelConfigRepository modelConfigRepository;
+
+        @Autowired
+        private ApiKeyProtector apiKeyProtector;
+
     @BeforeEach
     void setUp() {
         mockMvc = MockMvcBuilders.webAppContextSetup(webApplicationContext).build();
@@ -41,6 +59,8 @@ class ContextPolicyAdminControllerTest {
 
     @Test
     void validatesSavesAndPreviewsContextPolicy() throws Exception {
+                Long modelId = createModel();
+
         mockMvc.perform(post("/api/admin/context-policies/validate")
                         .header("X-Admin-Token", ADMIN_TOKEN)
                         .contentType(MediaType.APPLICATION_JSON)
@@ -56,10 +76,12 @@ class ContextPolicyAdminControllerTest {
                                 "name", "Support Bot Context",
                                 "description", "Context DSL v1 policy",
                                 "dslContent", sampleDsl(),
+                                "modelId", modelId,
                                 "enabled", true
                         ))))
                 .andExpect(status().isCreated())
                 .andExpect(jsonPath("$.name").value("Support Bot Context"))
+                .andExpect(jsonPath("$.modelId").value(modelId))
                 .andReturn()
                 .getResponse()
                 .getContentAsString();
@@ -77,11 +99,14 @@ class ContextPolicyAdminControllerTest {
 
     @Test
     void returnsDslErrorsForInvalidPolicyOnSave() throws Exception {
+                Long modelId = createModel();
+
         mockMvc.perform(post("/api/admin/context-policies")
                         .header("X-Admin-Token", ADMIN_TOKEN)
                         .contentType(MediaType.APPLICATION_JSON)
                         .content(json(Map.of(
                                 "name", "Bad Policy",
+                                "modelId", modelId,
                                 "dslContent", """
                                         <contextPolicy name="bad" maxTokens="10">
                                           <variables>
@@ -95,6 +120,26 @@ class ContextPolicyAdminControllerTest {
                 .andExpect(jsonPath("$.code").value("CONTEXT_DSL_INVALID"))
                 .andExpect(content().string(containsString("Unsupported variable")));
     }
+
+        private Long createModel() {
+                String suffix = UUID.randomUUID().toString();
+                ProviderConfig provider = new ProviderConfig();
+                provider.setName("Policy OpenAI " + suffix);
+                provider.setType(ProviderType.OPENAI_COMPATIBLE);
+                provider.setBaseUrl("http://localhost:8081/v1");
+                provider.setEncryptedApiKey(apiKeyProtector.encrypt("sk-policy-test"));
+                provider.setEnabled(true);
+                provider = providerConfigRepository.saveAndFlush(provider);
+
+                ModelConfig model = new ModelConfig();
+                model.setProvider(provider);
+                model.setDisplayName("Policy GPT " + suffix);
+                model.setModelName("gpt-policy");
+                model.setModelType(ModelType.CHAT);
+                model.setSupportsStreaming(true);
+                model.setEnabled(true);
+                return modelConfigRepository.saveAndFlush(model).getId();
+        }
 
     private String json(Object value) throws Exception {
         return objectMapper.writeValueAsString(value);
