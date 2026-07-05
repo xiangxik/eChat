@@ -1,0 +1,32 @@
+spring:
+  datasource:
+    url: jdbc:h2:mem:echat;MODE=PostgreSQL;DATABASE_TO_LOWER=TRUE;DEFAULT_NULL_ORDERING=HIGH
+    username: sa
+    password:
+    driver-class-name: org.h2.Driver
+  flyway:
+    enabled: false
+  sql:
+    init:
+      mode: always
+  jpa:
+    hibernate:
+      ddl-auto: none
+
+echat:
+  service:
+    version: 0.1.0
+  llm:
+    provider: test-provider
+    model: test-model
+    base-url: http://localhost:8081/v1
+    api-key: test-key
+    temperature: 0.2
+    max-tokens: 4096
+  context:
+    default-max-tokens: 12000
+    max-conversation-messages: 20
+    embedding-dimension: 1536
+  security:
+    api-key-encryption-secret: test-only-change-this-32-byte-secret
+    admin-token: test-admin-token

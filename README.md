@@ -1,0 +1,118 @@
+# eChat
+
+eChat is a phased enterprise chatbot monorepo. Phase 1 creates a runnable skeleton for the user chat app, admin app, and Spring Boot backend.
+
+## Structure
+
+```text
+apps/
+  chat-web/          React + TypeScript chatbot UI
+  admin-web/         React + TypeScript Ant Design admin UI
+services/
+  chatbot-service/   Spring Boot backend service
+docs/                Architecture and API notes
+```
+
+## Prerequisites
+
+- Node.js 22 LTS or newer
+- npm 10 or newer
+- Java 25.0.3 LTS
+- Maven 3.9.16
+- PostgreSQL 18 with pgvector
+- Redis
+
+## Install Frontend Dependencies
+
+```bash
+npm install
+```
+
+## Run
+
+Start the backend:
+
+```bash
+mvn -f services/chatbot-service/pom.xml spring-boot:run
+```
+
+For a local smoke run without PostgreSQL credentials, use the in-memory smoke profile.
+
+PowerShell:
+
+```powershell
+$env:SPRING_PROFILES_ACTIVE = 'smoke'; mvn -f services/chatbot-service/pom.xml spring-boot:run
+```
+
+Bash:
+
+```bash
+SPRING_PROFILES_ACTIVE=smoke mvn -f services/chatbot-service/pom.xml spring-boot:run
+```
+
+Start the chatbot web app:
+
+```bash
+npm run dev:chat
+```
+
+Start the admin web app:
+
+```bash
+npm run dev:admin
+```
+
+Default local URLs:
+
+- Backend: `http://localhost:8080`
+- Swagger UI: `http://localhost:8080/swagger-ui.html`
+- chat-web: `http://localhost:5173`
+- admin-web: `http://localhost:5174`
+
+## Test and Build
+
+Backend tests:
+
+```bash
+npm run test:backend
+```
+
+Frontend builds:
+
+```bash
+npm run build:chat
+npm run build:admin
+```
+
+Lint frontend code:
+
+```bash
+npm run lint
+```
+
+## Backend Configuration
+
+The backend reads local infrastructure and LLM defaults from environment variables. Useful defaults are defined in `services/chatbot-service/src/main/resources/application.yml`.
+
+Common variables:
+
+- `SERVER_PORT`
+- `DB_HOST`, `DB_PORT`, `DB_NAME`, `DB_USERNAME`, `DB_PASSWORD`
+- `REDIS_HOST`, `REDIS_PORT`, `REDIS_PASSWORD`
+- `LLM_PROVIDER`, `LLM_MODEL`, `LLM_BASE_URL`, `LLM_API_KEY`
+- `CONTEXT_EMBEDDING_DIMENSION` defaults to `1536` for pgvector memory embeddings
+- `API_KEY_ENCRYPTION_SECRET` protects provider API keys before they are stored
+
+API keys must not be committed. Provider configuration responses never return plaintext API keys; submitted keys are encrypted before storage.
+
+## Phase 1 Acceptance Criteria
+
+- Backend starts with Spring Boot 4.1.0.
+- `GET /api/health` returns service health metadata.
+- chat-web starts through Vite.
+- admin-web starts through Vite.
+- Backend includes and runs a health check test.
+
+## Next Phases
+
+See [docs/architecture.md](docs/architecture.md) for the architecture, module boundaries, Context Engine direction, and staged roadmap.

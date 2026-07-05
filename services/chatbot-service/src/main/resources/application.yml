@@ -1,0 +1,60 @@
+server:
+  port: ${SERVER_PORT:8080}
+
+spring:
+  application:
+    name: chatbot-service
+  datasource:
+    url: jdbc:postgresql://${DB_HOST:localhost}:${DB_PORT:5432}/${DB_NAME:echat}
+    username: ${DB_USERNAME:echat}
+    password: ${DB_PASSWORD:Test.132}
+  jpa:
+    hibernate:
+      ddl-auto: validate
+    open-in-view: false
+    properties:
+      hibernate:
+        format_sql: true
+  flyway:
+    enabled: true
+    placeholders:
+      embeddingDimension: ${CONTEXT_EMBEDDING_DIMENSION:1536}
+  data:
+    redis:
+      host: ${REDIS_HOST:localhost}
+      port: ${REDIS_PORT:6379}
+      password: ${REDIS_PASSWORD:}
+
+management:
+  endpoints:
+    web:
+      exposure:
+        include: health,info,metrics,prometheus
+  endpoint:
+    health:
+      probes:
+        enabled: true
+
+springdoc:
+  api-docs:
+    path: /v3/api-docs
+  swagger-ui:
+    path: /swagger-ui.html
+
+echat:
+  service:
+    version: 0.1.0
+  llm:
+    provider: ${LLM_PROVIDER:openai-compatible}
+    model: ${LLM_MODEL:gpt-4.1-mini}
+    base-url: ${LLM_BASE_URL:http://localhost:8081/v1}
+    api-key: ${LLM_API_KEY:}
+    temperature: ${LLM_TEMPERATURE:0.2}
+    max-tokens: ${LLM_MAX_TOKENS:4096}
+  context:
+    default-max-tokens: ${CONTEXT_DEFAULT_MAX_TOKENS:12000}
+    max-conversation-messages: ${CONTEXT_MAX_CONVERSATION_MESSAGES:20}
+    embedding-dimension: ${CONTEXT_EMBEDDING_DIMENSION:1536}
+  security:
+    api-key-encryption-secret: ${API_KEY_ENCRYPTION_SECRET:dev-only-change-this-32-byte-secret}
+    admin-token: ${ADMIN_TOKEN:dev-admin-token}

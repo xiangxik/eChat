@@ -1,0 +1,15 @@
+spring:
+  datasource:
+    url: jdbc:h2:mem:echat;MODE=PostgreSQL;DATABASE_TO_LOWER=TRUE;DEFAULT_NULL_ORDERING=HIGH
+    username: sa
+    password:
+    driver-class-name: org.h2.Driver
+  flyway:
+    enabled: false
+  sql:
+    init:
+      mode: always
+      schema-locations: classpath:schema-smoke.sql
+  jpa:
+    hibernate:
+      ddl-auto: none
