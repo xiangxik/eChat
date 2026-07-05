@@ -1,9 +1,19 @@
 spring:
+  datasource:
+    url: jdbc:postgresql://${TEST_DB_HOST:${DB_HOST:localhost}}:${TEST_DB_PORT:${DB_PORT:5432}}/${TEST_DB_NAME:${DB_NAME:echat}}?currentSchema=${TEST_DB_SCHEMA:echat_test},public
+    username: ${TEST_DB_USERNAME:${DB_USERNAME:postgres}}
+    password: ${TEST_DB_PASSWORD:${DB_PASSWORD:Test.132}}
   flyway:
     enabled: true
+    create-schemas: true
+    default-schema: ${TEST_DB_SCHEMA:echat_test}
+    schemas: ${TEST_DB_SCHEMA:echat_test}
   jpa:
     hibernate:
       ddl-auto: validate
+    properties:
+      hibernate:
+        default_schema: ${TEST_DB_SCHEMA:echat_test}
 
 echat:
   service:

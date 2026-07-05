@@ -37,6 +37,9 @@ public class MemoryItem extends AuditableEntity {
     @Column(name = "embedding", columnDefinition = "vector(1536)")
     private float[] embedding;
 
+    @Column(name = "embedding_dimension")
+    private Integer embeddingDimension;
+
     @JdbcTypeCode(SqlTypes.JSON)
     @Column(name = "metadata", nullable = false, columnDefinition = "jsonb")
     private Map<String, Object> metadata = new LinkedHashMap<>();
@@ -79,6 +82,14 @@ public class MemoryItem extends AuditableEntity {
 
     public void setEmbedding(float[] embedding) {
         this.embedding = embedding == null ? null : embedding.clone();
+    }
+
+    public Integer getEmbeddingDimension() {
+        return embeddingDimension;
+    }
+
+    public void setEmbeddingDimension(Integer embeddingDimension) {
+        this.embeddingDimension = embeddingDimension;
     }
 
     public Map<String, Object> getMetadata() {

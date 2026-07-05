@@ -19,6 +19,8 @@ import com.xiangxik.echat.chatbot.domain.model.ProviderConfig;
 import com.xiangxik.echat.chatbot.service.context.ContextAssemblyRequest;
 import com.xiangxik.echat.chatbot.service.context.ContextAssemblyResult;
 import com.xiangxik.echat.chatbot.service.context.ContextEngine;
+import com.xiangxik.echat.chatbot.service.context.ContextMemoryBundle;
+import com.xiangxik.echat.chatbot.service.context.ContextMemoryResolver;
 import com.xiangxik.echat.chatbot.service.context.ContextMessage;
 import com.xiangxik.echat.chatbot.service.context.ContextPolicyDefinition;
 import com.xiangxik.echat.chatbot.service.context.ContextPolicyValidator;
@@ -63,6 +65,8 @@ public class ChatRuntimeService {
     private final TokenEstimator tokenEstimator;
     private final ObjectMapper objectMapper;
     private final ChatSessionStateCache sessionStateCache;
+    private final ContextMemoryResolver contextMemoryResolver;
+    private final MemoryExtractionService memoryExtractionService;
     private final ChatCancellationRegistry cancellationRegistry;
     private final TransactionTemplate transactionTemplate;
 
@@ -75,6 +79,8 @@ public class ChatRuntimeService {
                               TokenEstimator tokenEstimator,
                               ObjectMapper objectMapper,
                               ChatSessionStateCache sessionStateCache,
+                              ContextMemoryResolver contextMemoryResolver,
+                              MemoryExtractionService memoryExtractionService,
                               ChatCancellationRegistry cancellationRegistry,
                               TransactionTemplate transactionTemplate) {
         this.conversationService = conversationService;
@@ -86,6 +92,8 @@ public class ChatRuntimeService {
         this.tokenEstimator = tokenEstimator;
         this.objectMapper = objectMapper;
         this.sessionStateCache = sessionStateCache;
+        this.contextMemoryResolver = contextMemoryResolver;
+        this.memoryExtractionService = memoryExtractionService;
         this.cancellationRegistry = cancellationRegistry;
         this.transactionTemplate = transactionTemplate;
     }
@@ -132,6 +140,8 @@ public class ChatRuntimeService {
                     invocation.llmRequest());
             Message assistantMessage = saveAssistantMessage(conversationId, response.content(), context,
                     invocation.contextResult(), response.finishReason(), response.metadata());
+                memoryExtractionService.afterTurn(invocation.conversationResponse().chatbotId(), conversationId,
+                    invocation.userId(), invocation.userMessage(), assistantMessage);
             log.info("audit.chat.message.completed requestId={} traceId={} conversationId={} userMessageId={} assistantMessageId={} tokens={}",
                     context.requestId(), context.traceId(), conversationId, invocation.userMessage().getId(),
                     assistantMessage.getId(), assistantMessage.getTokenCount());
@@ -181,6 +191,8 @@ public class ChatRuntimeService {
 
             Message assistantMessage = saveAssistantMessage(conversationId, assistantContent.toString(), context,
                     invocation.contextResult(), "stop", Map.of("stream", true));
+                memoryExtractionService.afterTurn(invocation.conversationResponse().chatbotId(), conversationId,
+                    invocation.userId(), invocation.userMessage(), assistantMessage);
             sessionStateCache.recordStreamState(context.requestId(), "completed");
             send(emitter, "message_end", new ChatStreamEventResponse("message_end", context.requestId(),
                     context.traceId(), conversationId, assistantMessage.getId(), null, assistantContent.toString(),
@@ -229,7 +241,8 @@ public class ChatRuntimeService {
             log.info("audit.chat.message.received requestId={} traceId={} conversationId={} userMessageId={} contextTokens={}",
                     context.requestId(), context.traceId(), conversationId, userMessage.getId(),
                     contextResult.tokenBudgetReport().totalEstimatedTokens());
-            return new PreparedInvocation(toConversationResponse(conversation), userMessage, provider, model, apiKey,
+                return new PreparedInvocation(toConversationResponse(conversation), conversation.getUserId(), userMessage,
+                    provider, model, apiKey,
                     llmRequest, contextResult);
         });
     }
@@ -239,6 +252,8 @@ public class ChatRuntimeService {
                                                   RuntimeRequestContext requestContext) {
         List<Message> messages = messageService.listByConversation(conversation.getId());
         ContextPolicyDefinition policy = contextPolicyValidator.validateAndParse(contextPolicy.getDslContent());
+        ContextMemoryBundle memoryBundle = contextMemoryResolver.resolve(policy, conversation.getChatbot().getId(),
+            conversation.getId(), conversation.getUserId(), latestUserMessage, metadata, messages);
         Map<String, Object> runtime = new LinkedHashMap<>();
         runtime.put("requestId", requestContext.requestId());
         runtime.put("traceId", requestContext.traceId());
@@ -246,8 +261,8 @@ public class ChatRuntimeService {
         runtime.put("cancellationSupported", true);
         return contextEngine.assemble(policy, new ContextAssemblyRequest(conversation.getChatbot().getId(),
                 conversation.getId(), conversation.getUserId(), latestUserMessage, metadata,
-                messages.stream().map(this::toContextMessage).toList(), List.of(), List.of(), Map.of(), List.of(),
-                List.of(), runtime));
+            messages.stream().map(this::toContextMessage).toList(), memoryBundle.shortTermMemory(),
+            memoryBundle.longTermMemory(), Map.of(), memoryBundle.retrievalResults(), List.of(), runtime));
     }
 
     private ContextPolicy resolveContextPolicy(ChatbotConfig chatbot) {
@@ -385,6 +400,7 @@ public class ChatRuntimeService {
 
     private record PreparedInvocation(
             ChatConversationResponse conversationResponse,
+            String userId,
             Message userMessage,
             ProviderConfig provider,
             ModelConfig model,

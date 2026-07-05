@@ -137,6 +137,7 @@ class ChatRuntimeControllerTest extends PostgresIntegrationTest {
                     {
                       "chatbotId":%d,
                       "message":"Hello from create",
+                                            "anonymousSessionId":"anon-create-message",
                       "metadata":{"topic":"create"}
                     }
                     """.formatted(chatbotId)))
