@@ -161,6 +161,18 @@ body {
   margin-bottom: 20px;
 }
 
+.selected-table-row > td {
+  background: #edf7f4 !important;
+}
+
+.eval-run-summary {
+  margin-bottom: 16px;
+}
+
+.eval-results-table {
+  margin-top: 16px;
+}
+
 @media (max-width: 920px) {
   .metric-grid {
     grid-template-columns: 1fr;

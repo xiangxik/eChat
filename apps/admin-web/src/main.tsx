@@ -9,6 +9,7 @@ import { RequireAdmin } from './RequireAdmin';
 import { ChatbotsPage } from './pages/ChatbotsPage';
 import { ContextPoliciesPage } from './pages/ContextPoliciesPage';
 import { DashboardPage } from './pages/DashboardPage';
+import { EvalsPage } from './pages/EvalsPage';
 import { LoginPage } from './pages/LoginPage';
 import { ModelsPage } from './pages/ModelsPage';
 import { ProvidersPage } from './pages/ProvidersPage';
@@ -38,6 +39,7 @@ const router = createBrowserRouter([
       { path: 'models', element: <ModelsPage /> },
       { path: 'chatbots', element: <ChatbotsPage /> },
       { path: 'context-policies', element: <ContextPoliciesPage /> },
+      { path: 'evals', element: <EvalsPage /> },
     ],
   },
 ]);

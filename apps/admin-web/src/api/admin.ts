@@ -180,6 +180,71 @@ export interface ContextAssemblyResult {
   warnings: string[];
 }
 
+export interface EvalDataset {
+  id: number;
+  name: string;
+  description?: string;
+  chatbotId: number;
+  createdAt?: string;
+  updatedAt?: string;
+}
+
+export interface EvalDatasetRequest {
+  name: string;
+  description?: string;
+  chatbotId: number;
+}
+
+export interface EvalCase {
+  id: number;
+  datasetId: number;
+  input: string;
+  expectedBehavior?: string;
+  expectedKeywords: string[];
+  metadata?: Record<string, unknown>;
+}
+
+export interface EvalCaseRequest {
+  input: string;
+  expectedBehavior?: string;
+  expectedKeywords?: string[];
+  metadata?: Record<string, unknown>;
+}
+
+export interface EvalRunRequest {
+  datasetId: number;
+  chatbotId?: number;
+  modelId?: number;
+  contextPolicyId?: number;
+  maxEstimatedTokens?: number;
+  forbiddenPhrases?: string[];
+  metadata?: Record<string, unknown>;
+}
+
+export interface EvalRun {
+  id: number;
+  datasetId: number;
+  chatbotId: number;
+  modelId?: number;
+  contextPolicyId?: number;
+  status: 'PENDING' | 'RUNNING' | 'COMPLETED' | 'FAILED';
+  startedAt?: string;
+  finishedAt?: string;
+  summary?: Record<string, unknown>;
+}
+
+export interface EvalResult {
+  id: number;
+  runId: number;
+  caseId: number;
+  output?: string;
+  contextSnapshot: Record<string, unknown>;
+  tokenBudgetReport: Record<string, unknown>;
+  scores: Record<string, unknown>;
+  passed: boolean;
+  error?: string;
+}
+
 export const providerTypes: ProviderType[] = [
   'OPENAI_COMPATIBLE',
   'ANTHROPIC',
@@ -238,4 +303,15 @@ export const adminApi = {
       method: 'POST',
       body: jsonBody(request),
     }),
+
+  listEvalDatasets: () => apiRequest<EvalDataset[]>('/api/admin/eval-datasets'),
+  createEvalDataset: (request: EvalDatasetRequest) =>
+    apiRequest<EvalDataset>('/api/admin/eval-datasets', { method: 'POST', body: jsonBody(request) }),
+  listEvalCases: (datasetId: number) => apiRequest<EvalCase[]>(`/api/admin/eval-datasets/${datasetId}/cases`),
+  createEvalCase: (datasetId: number, request: EvalCaseRequest) =>
+    apiRequest<EvalCase>(`/api/admin/eval-datasets/${datasetId}/cases`, { method: 'POST', body: jsonBody(request) }),
+  createEvalRun: (request: EvalRunRequest) =>
+    apiRequest<EvalRun>('/api/admin/eval-runs', { method: 'POST', body: jsonBody(request) }),
+  getEvalRun: (id: number) => apiRequest<EvalRun>(`/api/admin/eval-runs/${id}`),
+  listEvalResults: (id: number) => apiRequest<EvalResult[]>(`/api/admin/eval-runs/${id}/results`),
 };
