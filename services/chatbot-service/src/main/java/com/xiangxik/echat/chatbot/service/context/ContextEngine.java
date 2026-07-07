@@ -7,6 +7,8 @@ import java.util.List;
 import java.util.Locale;
 import java.util.Map;
 import java.util.Objects;
+import java.util.regex.Pattern;
+import java.util.regex.PatternSyntaxException;
 import java.util.stream.Collectors;
 import org.springframework.stereotype.Service;
 
@@ -29,7 +31,9 @@ public class ContextEngine {
 
         applyIncludeRules(policy, request, drafts);
         applyExcludeRules(policy, request, drafts);
+        applyRedactRules(policy, request, drafts, warnings);
         applyTruncateRules(policy, drafts, reserves, truncatedSections);
+        applyHardBudgetReserves(policy, drafts, truncatedSections);
 
         List<ContextSection> sections = new ArrayList<>();
         List<ContextMessage> messages = new ArrayList<>();
@@ -70,10 +74,10 @@ public class ContextEngine {
         for (ContextPolicyDefinition.VariableDefinition variable : policy.variables()) {
             drafts.put(variable.name(), switch (variable.name()) {
                 case "conversation" -> conversationDraft(variable, request);
-                case "shortTermMemory" -> memoryDraft("shortTermMemory", variable, request.shortTermMemory());
-                case "longTermMemory" -> memoryDraft("longTermMemory", variable, request.longTermMemory());
-                case "retrievalResults" -> memoryDraft("retrievalResults", variable, request.retrievalResults());
-                case "toolResults" -> memoryDraft("toolResults", variable, request.toolResults());
+                case "shortTermMemory" -> memoryDraft("shortTermMemory", variable, policy, request.shortTermMemory());
+                case "longTermMemory" -> memoryDraft("longTermMemory", variable, policy, request.longTermMemory());
+                case "retrievalResults" -> memoryDraft("retrievalResults", variable, policy, request.retrievalResults());
+                case "toolResults" -> memoryDraft("toolResults", variable, policy, request.toolResults());
                 case "userProfile" -> mapDraft("userProfile", request.userProfile());
                 case "runtime" -> mapDraft("runtime", request.runtime());
                 case "metadata" -> mapDraft("metadata", request.metadata());
@@ -99,14 +103,16 @@ public class ContextEngine {
         return new SectionDraft("USER", content, true, messages);
     }
 
-    private SectionDraft memoryDraft(String name, ContextPolicyDefinition.VariableDefinition variable,
-                                     List<ContextMemoryItem> items) {
+        private SectionDraft memoryDraft(String name, ContextPolicyDefinition.VariableDefinition variable,
+                         ContextPolicyDefinition policy, List<ContextMemoryItem> items) {
         List<ContextMemoryItem> filtered = items.stream()
                 .filter(item -> variable.minScore() <= 0 || item.score() >= variable.minScore())
+            .filter(item -> passesTrustRules(name, policy, item))
                 .limit(firstPositive(variable.topK(), variable.limit(), items.size()))
                 .toList();
         String content = filtered.stream()
-                .map(item -> "- " + item.content() + (item.score() > 0 ? " (score=" + item.score() + ")" : ""))
+            .map(item -> "- " + redactedItemContent(name, policy, item) + trustLabel(item)
+                + (item.score() > 0 ? " (score=" + item.score() + ")" : ""))
                 .collect(Collectors.joining("\n"));
         return new SectionDraft("USER", content.isBlank() ? "" : "[" + name + "]\n" + content, true, List.of());
     }
@@ -143,6 +149,25 @@ public class ContextEngine {
         }
     }
 
+    private void applyRedactRules(ContextPolicyDefinition policy, ContextAssemblyRequest request,
+                                  Map<String, SectionDraft> drafts, List<String> warnings) {
+        for (ContextPolicyDefinition.PolicyRule rule : policy.rules()) {
+            if (!"redact".equals(rule.type()) || !ruleApplies(rule, request)) {
+                continue;
+            }
+            SectionDraft draft = drafts.get(rule.target());
+            if (draft == null || draft.content().isBlank()) {
+                continue;
+            }
+            try {
+                String redacted = Pattern.compile(rule.pattern()).matcher(draft.content()).replaceAll(rule.replacement());
+                drafts.put(rule.target(), new SectionDraft(draft.role, redacted, draft.included, draft.messages));
+            } catch (PatternSyntaxException ex) {
+                warnings.add("Invalid redact pattern for section: " + rule.target());
+            }
+        }
+    }
+
     private void applyTruncateRules(ContextPolicyDefinition policy, Map<String, SectionDraft> drafts,
                                     Map<String, Integer> reserves, List<String> truncatedSections) {
         for (ContextPolicyDefinition.PolicyRule rule : policy.rules()) {
@@ -165,20 +190,166 @@ public class ContextEngine {
         }
     }
 
+    private void applyHardBudgetReserves(ContextPolicyDefinition policy, Map<String, SectionDraft> drafts,
+                                         List<String> truncatedSections) {
+        for (ContextPolicyDefinition.BudgetReserve reserve : policy.budgetReserves()) {
+            if (!"hard".equals(reserve.strategy())) {
+                continue;
+            }
+            SectionDraft draft = drafts.get(reserve.target());
+            if (draft == null || tokenEstimator.estimate(draft.content()) <= reserve.tokens()) {
+                continue;
+            }
+            if ("conversation".equals(reserve.target()) && !draft.messages.isEmpty()) {
+                drafts.put(reserve.target(), truncateConversationDraft(draft, reserve.tokens()));
+            } else {
+                drafts.put(reserve.target(), truncateByLines(draft, reserve.tokens()));
+            }
+            if (!truncatedSections.contains(reserve.target())) {
+                truncatedSections.add(reserve.target());
+            }
+        }
+    }
+
     private boolean evaluate(String expression, String target, ContextAssemblyRequest request) {
         String normalized = expression == null ? "" : expression.strip();
         if ("conversation.latestUserMessage.exists".equals(normalized)) {
             return request.latestUserMessage() != null && !request.latestUserMessage().isBlank();
         }
+        if (normalized.equals(target + ".exists")) {
+            return !itemsFor(target, request).isEmpty();
+        }
+        if (normalized.startsWith(target + ".count >")) {
+            int threshold = Integer.parseInt(normalized.substring((target + ".count >").length()).strip());
+            return itemsFor(target, request).size() > threshold;
+        }
         if (normalized.startsWith(target + ".score >")) {
             double threshold = Double.parseDouble(normalized.substring((target + ".score >").length()).strip());
             return itemsFor(target, request).stream().anyMatch(item -> item.score() > threshold);
+        }
+        if (matchesMapExpression(normalized, "metadata", request.metadata())) {
+            return true;
+        }
+        if (matchesMapExpression(normalized, "runtime", request.runtime())) {
+            return true;
         }
         if ("metadata.sensitive == true".equals(normalized)) {
             return Boolean.TRUE.equals(request.metadata().get("sensitive"))
                     || itemsFor(target, request).stream().anyMatch(item -> Boolean.TRUE.equals(item.metadata().get("sensitive")));
         }
         return false;
+    }
+
+    private boolean ruleApplies(ContextPolicyDefinition.PolicyRule rule, ContextAssemblyRequest request) {
+        return rule.when().isBlank() || evaluate(rule.when(), rule.target(), request);
+    }
+
+    private boolean passesTrustRules(String target, ContextPolicyDefinition policy, ContextMemoryItem item) {
+        for (ContextPolicyDefinition.PolicyRule rule : policy.rules()) {
+            if (!"filter".equals(rule.type()) || !target.equals(rule.target())) {
+                continue;
+            }
+            if (!rule.minTrust().isBlank() && trustScore(item) < trustLevel(rule.minTrust())) {
+                return false;
+            }
+            if (rule.minTrustScore() > 0 && trustScore(item) < rule.minTrustScore()) {
+                return false;
+            }
+        }
+        return true;
+    }
+
+    private String redactedItemContent(String target, ContextPolicyDefinition policy, ContextMemoryItem item) {
+        String content = item.content();
+        for (ContextPolicyDefinition.PolicyRule rule : policy.rules()) {
+            if (!"redact".equals(rule.type()) || !target.equals(rule.target()) || !ruleAppliesToItem(rule, item)) {
+                continue;
+            }
+            content = Pattern.compile(rule.pattern()).matcher(content).replaceAll(rule.replacement());
+        }
+        return content;
+    }
+
+    private boolean ruleAppliesToItem(ContextPolicyDefinition.PolicyRule rule, ContextMemoryItem item) {
+        if (rule.when().isBlank()) {
+            return true;
+        }
+        return "item.sensitive == true".equals(rule.when()) && Boolean.TRUE.equals(item.metadata().get("sensitive"));
+    }
+
+    private String trustLabel(ContextMemoryItem item) {
+        Object source = firstPresent(item.metadata(), "source", "sourceId");
+        Object trust = firstPresent(item.metadata(), "sourceTrust", "trust", "trustLevel", "trustScore");
+        if (source == null && trust == null) {
+            return "";
+        }
+        return " (source=" + Objects.toString(source, "unknown") + ", trust=" + Objects.toString(trust, "unknown") + ")";
+    }
+
+    private double trustScore(ContextMemoryItem item) {
+        Object trustScore = item.metadata().get("trustScore");
+        if (trustScore instanceof Number number) {
+            return number.doubleValue();
+        }
+        Object trust = firstPresent(item.metadata(), "sourceTrust", "trust", "trustLevel");
+        return trust == null ? 0 : trustLevel(Objects.toString(trust));
+    }
+
+    private double trustLevel(String value) {
+        return switch (value.toLowerCase(Locale.ROOT)) {
+            case "verified" -> 90;
+            case "trusted" -> 70;
+            case "internal" -> 50;
+            case "untrusted" -> 0;
+            default -> parseNumber(value);
+        };
+    }
+
+    private Object firstPresent(Map<String, Object> values, String... keys) {
+        for (String key : keys) {
+            if (values.containsKey(key)) {
+                return values.get(key);
+            }
+        }
+        return null;
+    }
+
+    private double parseNumber(String value) {
+        try {
+            return Double.parseDouble(value);
+        } catch (NumberFormatException ex) {
+            return 0;
+        }
+    }
+
+    private boolean matchesMapExpression(String expression, String prefix, Map<String, Object> values) {
+        String marker = prefix + ".";
+        if (!expression.startsWith(marker) || !expression.contains(" == ")) {
+            return false;
+        }
+        String[] parts = expression.substring(marker.length()).split(" == ", 2);
+        if (parts.length != 2) {
+            return false;
+        }
+        Object actual = values.get(parts[0].strip());
+        String expected = parts[1].strip().replaceAll("^['\"]|['\"]$", "");
+        return Objects.toString(actual, "").equals(expected);
+    }
+
+    private SectionDraft truncateConversationDraft(SectionDraft draft, int reserve) {
+        List<ContextMessage> messages = new ArrayList<>(draft.messages);
+        while (messages.size() > 1 && tokenEstimator.estimate(renderConversation(messages)) > reserve) {
+            messages.removeFirst();
+        }
+        return new SectionDraft(draft.role, renderConversation(messages), draft.included, messages);
+    }
+
+    private SectionDraft truncateByLines(SectionDraft draft, int reserve) {
+        List<String> lines = new ArrayList<>(draft.content().lines().toList());
+        while (lines.size() > 1 && tokenEstimator.estimate(String.join("\n", lines)) > reserve) {
+            lines.removeLast();
+        }
+        return new SectionDraft(draft.role, String.join("\n", lines), draft.included, draft.messages);
     }
 
     private List<ContextMemoryItem> itemsFor(String target, ContextAssemblyRequest request) {

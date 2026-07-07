@@ -107,7 +107,14 @@ class EvalAdminControllerTest extends PostgresIntegrationTest {
                                 "input", "How do I reset VPN?",
                                 "expectedBehavior", "Mentions VPN reset steps",
                                 "expectedKeywords", List.of("VPN", "reset"),
-                                "metadata", Map.of("apiKey", "should-not-leak", "topic", "vpn")
+                            "metadata", Map.of(
+                                "apiKey", "should-not-leak",
+                                "topic", "vpn",
+                                "goldenConversation", List.of(
+                                    Map.of("role", "USER", "content", "My VPN client is failing."),
+                                    Map.of("role", "ASSISTANT", "content", "Check your VPN profile first.")
+                                )
+                            )
                         ))))
                 .andExpect(status().isCreated())
                 .andExpect(jsonPath("$.datasetId").value(datasetId))
@@ -122,7 +129,24 @@ class EvalAdminControllerTest extends PostgresIntegrationTest {
                         .content(json(Map.of(
                                 "datasetId", datasetId,
                                 "maxEstimatedTokens", 2000,
-                                "forbiddenPhrases", List.of("do not know")
+                            "maxLatencyMillis", 30000,
+                            "maxEstimatedCostUsd", 1.0,
+                            "costPer1kTokensUsd", 0.002,
+                            "forbiddenPhrases", List.of("do not know"),
+                            "rubric", Map.of(
+                                "minScore", 1.0,
+                                "criteria", List.of(Map.of(
+                                    "name", "vpn reset coverage",
+                                    "required", true,
+                                    "keywords", List.of("VPN", "reset")
+                                ))
+                            ),
+                            "releaseGate", Map.of(
+                                "minPassRate", 1.0,
+                                "maxFailedCases", 0,
+                                "maxAverageLatencyMillis", 30000,
+                                "maxEstimatedCostUsd", 1.0
+                            )
                         ))))
                 .andExpect(status().isAccepted())
                 .andExpect(jsonPath("$.datasetId").value(datasetId))
@@ -134,6 +158,8 @@ class EvalAdminControllerTest extends PostgresIntegrationTest {
         JsonNode completedRun = awaitCompletedRun(runId);
         assertThat(completedRun.path("status").asText()).isEqualTo("COMPLETED");
         assertThat(completedRun.path("summary").path("passedCases").asInt()).isEqualTo(1);
+        assertThat(completedRun.path("summary").path("releaseGatePassed").asBoolean()).isTrue();
+        assertThat(completedRun.path("summary").path("metrics").path("totalEstimatedCostUsd").asDouble()).isGreaterThanOrEqualTo(0.0);
 
         mockMvc.perform(get("/api/admin/eval-runs/{id}/results", runId)
                         .header("X-Admin-Token", ADMIN_TOKEN))
@@ -142,9 +168,15 @@ class EvalAdminControllerTest extends PostgresIntegrationTest {
                 .andExpect(jsonPath("$[0].output").value("assistant: How do I reset VPN?"))
                 .andExpect(jsonPath("$[0].passed").value(true))
                 .andExpect(jsonPath("$[0].contextSnapshot.isolated").value(true))
+                .andExpect(jsonPath("$[0].contextSnapshot.goldenReplay.replayedMessages").value(2))
                 .andExpect(jsonPath("$[0].contextSnapshot.messages").exists())
                 .andExpect(jsonPath("$[0].tokenBudgetReport.totalEstimatedTokens").exists())
-                .andExpect(jsonPath("$[0].scores.keywordMatch.passed").value(true));
+                .andExpect(jsonPath("$[0].scores.keywordMatch.passed").value(true))
+                .andExpect(jsonPath("$[0].scores.rubricScoring.passed").value(true))
+                .andExpect(jsonPath("$[0].scores.latencyBudget.passed").value(true))
+                .andExpect(jsonPath("$[0].scores.costBudget.passed").value(true))
+                .andExpect(jsonPath("$[0].scores.metrics.latencyMillis").exists())
+                .andExpect(jsonPath("$[0].scores.metrics.estimatedCostUsd").exists());
 
         assertThat(conversationRepository.count()).isEqualTo(conversationsBefore);
     }

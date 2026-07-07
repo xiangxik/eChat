@@ -4,6 +4,7 @@ import {
   App as AntApp,
   Button,
   Card,
+  Checkbox,
   Descriptions,
   Drawer,
   Form,
@@ -311,8 +312,26 @@ export function EvalsPage() {
           <Form.Item name="maxEstimatedTokens" label="Max Estimated Context Tokens" rules={[{ type: 'number', min: 1 }]}>
             <InputNumber min={1} precision={0} className="full-width-control" />
           </Form.Item>
+          <Form.Item name="maxLatencyMillis" label="Max Latency Millis" rules={[{ type: 'number', min: 1 }]}>
+            <InputNumber min={1} precision={0} className="full-width-control" />
+          </Form.Item>
+          <Form.Item name="maxEstimatedCostUsd" label="Max Estimated Cost USD" rules={[{ type: 'number', min: 0 }]}>
+            <InputNumber min={0} precision={6} className="full-width-control" />
+          </Form.Item>
+          <Form.Item name="costPer1kTokensUsd" label="Cost Per 1K Tokens USD" rules={[{ type: 'number', min: 0 }]}>
+            <InputNumber min={0} precision={6} className="full-width-control" />
+          </Form.Item>
+          <Form.Item name="goldenReplay" valuePropName="checked" initialValue>
+            <Checkbox>Golden conversation replay</Checkbox>
+          </Form.Item>
           <Form.Item name="forbiddenPhrasesText" label="Forbidden Phrases">
             <Input placeholder="internal only, do not know" />
+          </Form.Item>
+          <Form.Item name="rubricJson" label="Rubric JSON">
+            <Input.TextArea rows={5} className="json-editor" spellCheck={false} />
+          </Form.Item>
+          <Form.Item name="releaseGateJson" label="Release Gate JSON">
+            <Input.TextArea rows={5} className="json-editor" spellCheck={false} />
           </Form.Item>
           <Form.Item name="metadataJson" label="Run Metadata JSON">
             <Input.TextArea rows={8} className="json-editor" spellCheck={false} />
@@ -334,6 +353,8 @@ interface EvalCaseFormValues extends EvalCaseRequest {
 
 interface EvalRunFormValues extends EvalRunRequest {
   forbiddenPhrasesText?: string;
+  rubricJson?: string;
+  releaseGateJson?: string;
   metadataJson?: string;
 }
 
@@ -351,7 +372,13 @@ function toRunRequest(values: EvalRunFormValues, datasetId: number): EvalRunRequ
     datasetId,
     chatbotId: values.chatbotId,
     maxEstimatedTokens: values.maxEstimatedTokens,
+    maxLatencyMillis: values.maxLatencyMillis,
+    maxEstimatedCostUsd: values.maxEstimatedCostUsd,
+    costPer1kTokensUsd: values.costPer1kTokensUsd,
+    goldenReplay: values.goldenReplay,
     forbiddenPhrases: splitList(values.forbiddenPhrasesText),
+    rubric: parseJsonObject(values.rubricJson ?? '{}', 'Rubric'),
+    releaseGate: parseJsonObject(values.releaseGateJson ?? '{}', 'Release gate'),
     metadata: parseJsonObject(values.metadataJson ?? '{}', 'Run metadata'),
   };
 }
@@ -400,6 +427,9 @@ function RunSummary({ run }: { run: EvalRun }) {
       <Descriptions.Item label="Passed">{String(run.summary?.passedCases ?? '-')}</Descriptions.Item>
       <Descriptions.Item label="Failed">{String(run.summary?.failedCases ?? '-')}</Descriptions.Item>
       <Descriptions.Item label="Pass Rate">{formatRate(run.summary?.passRate)}</Descriptions.Item>
+      <Descriptions.Item label="Release Gate">{formatBoolean(run.summary?.releaseGatePassed)}</Descriptions.Item>
+      <Descriptions.Item label="Avg Latency">{formatMillis(readMetric(run, 'averageLatencyMillis'))}</Descriptions.Item>
+      <Descriptions.Item label="Total Cost">{formatUsd(readMetric(run, 'totalEstimatedCostUsd'))}</Descriptions.Item>
     </Descriptions>
   );
 }
@@ -429,4 +459,21 @@ function ResultDetail({ result }: { result: EvalResult }) {
 
 function formatRate(value: unknown) {
   return typeof value === 'number' ? `${Math.round(value * 100)}%` : '-';
+}
+
+function formatBoolean(value: unknown) {
+  return typeof value === 'boolean' ? (value ? 'Passed' : 'Failed') : '-';
+}
+
+function readMetric(run: EvalRun, name: string) {
+  const metrics = run.summary?.metrics;
+  return metrics && typeof metrics === 'object' && name in metrics ? (metrics as Record<string, unknown>)[name] : undefined;
+}
+
+function formatMillis(value: unknown) {
+  return typeof value === 'number' ? `${Math.round(value)} ms` : '-';
+}
+
+function formatUsd(value: unknown) {
+  return typeof value === 'number' ? `$${value.toFixed(6)}` : '-';
 }

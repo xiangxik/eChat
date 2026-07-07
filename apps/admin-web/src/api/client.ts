@@ -1,4 +1,6 @@
-export const apiBaseUrl = import.meta.env.VITE_API_BASE_URL ?? '';
+import { readRuntimeEnv } from '../runtimeEnv';
+
+export const apiBaseUrl = readRuntimeEnv('VITE_API_BASE_URL') ?? '';
 
 export interface HealthResponse {
   status: string;

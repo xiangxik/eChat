@@ -217,7 +217,13 @@ export interface EvalRunRequest {
   modelId?: number;
   contextPolicyId?: number;
   maxEstimatedTokens?: number;
+  maxLatencyMillis?: number;
+  maxEstimatedCostUsd?: number;
+  costPer1kTokensUsd?: number;
+  goldenReplay?: boolean;
   forbiddenPhrases?: string[];
+  rubric?: Record<string, unknown>;
+  releaseGate?: Record<string, unknown>;
   metadata?: Record<string, unknown>;
 }
 
@@ -243,6 +249,21 @@ export interface EvalResult {
   scores: Record<string, unknown>;
   passed: boolean;
   error?: string;
+}
+
+export interface AuditLog {
+  id: number;
+  occurredAt: string;
+  actorType: string;
+  actorId?: string;
+  tenantId: string;
+  eventType: string;
+  resourceType: string;
+  resourceId?: string;
+  requestId?: string;
+  traceId?: string;
+  remoteAddress?: string;
+  metadata?: Record<string, unknown>;
 }
 
 export const providerTypes: ProviderType[] = [
@@ -314,4 +335,6 @@ export const adminApi = {
     apiRequest<EvalRun>('/api/admin/eval-runs', { method: 'POST', body: jsonBody(request) }),
   getEvalRun: (id: number) => apiRequest<EvalRun>(`/api/admin/eval-runs/${id}`),
   listEvalResults: (id: number) => apiRequest<EvalResult[]>(`/api/admin/eval-runs/${id}/results`),
+
+  listAuditLogs: () => apiRequest<AuditLog[]>('/api/admin/audit-logs'),
 };

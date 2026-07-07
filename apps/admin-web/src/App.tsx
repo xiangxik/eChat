@@ -1,6 +1,7 @@
 import {
   ApiOutlined,
   AppstoreOutlined,
+  AuditOutlined,
   DashboardOutlined,
   ExperimentOutlined,
   LogoutOutlined,
@@ -36,6 +37,7 @@ const menuItems = [
   { key: '/chatbots', icon: <RobotOutlined />, label: <Link to="/chatbots">Chatbots</Link> },
   { key: '/context-policies', icon: <MessageOutlined />, label: <Link to="/context-policies">Context Policies</Link> },
   { key: '/evals', icon: <ExperimentOutlined />, label: <Link to="/evals">Eval Harness</Link> },
+  { key: '/audit-logs', icon: <AuditOutlined />, label: <Link to="/audit-logs">Audit Logs</Link> },
 ];
 
 export function App() {

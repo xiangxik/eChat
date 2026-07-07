@@ -10,9 +10,11 @@ import org.springframework.web.servlet.config.annotation.WebMvcConfigurer;
 public class AdminWebMvcConfig implements WebMvcConfigurer {
 
     private final AdminTokenInterceptor adminTokenInterceptor;
+    private final ChatbotProperties properties;
 
-    public AdminWebMvcConfig(AdminTokenInterceptor adminTokenInterceptor) {
+    public AdminWebMvcConfig(AdminTokenInterceptor adminTokenInterceptor, ChatbotProperties properties) {
         this.adminTokenInterceptor = adminTokenInterceptor;
+        this.properties = properties;
     }
 
     @Override
@@ -25,7 +27,7 @@ public class AdminWebMvcConfig implements WebMvcConfigurer {
     @Override
     public void addCorsMappings(CorsRegistry registry) {
         registry.addMapping("/api/**")
-                .allowedOriginPatterns("http://localhost:*", "http://127.0.0.1:*")
+                .allowedOriginPatterns(properties.security().allowedOrigins().toArray(String[]::new))
                 .allowedMethods("GET", "POST", "PUT", "DELETE", "OPTIONS")
                 .allowedHeaders("*")
                 .allowCredentials(true);

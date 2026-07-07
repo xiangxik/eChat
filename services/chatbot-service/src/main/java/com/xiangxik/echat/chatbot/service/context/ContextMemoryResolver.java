@@ -3,16 +3,21 @@ package com.xiangxik.echat.chatbot.service.context;
 import com.xiangxik.echat.chatbot.domain.model.Message;
 import com.xiangxik.echat.chatbot.service.MemoryService;
 import com.xiangxik.echat.chatbot.service.ShortTermMemoryCache;
+import com.xiangxik.echat.chatbot.service.llm.LlmProviderException;
 import com.xiangxik.echat.chatbot.service.retrieval.RetrievalProvider;
 import com.xiangxik.echat.chatbot.service.retrieval.RetrievalRequest;
 import java.util.Comparator;
 import java.util.LinkedHashMap;
 import java.util.List;
 import java.util.Map;
+import org.slf4j.Logger;
+import org.slf4j.LoggerFactory;
 import org.springframework.stereotype.Service;
 
 @Service
 public class ContextMemoryResolver {
+
+    private static final Logger log = LoggerFactory.getLogger(ContextMemoryResolver.class);
 
     private static final int DEFAULT_SHORT_TERM_LIMIT = 6;
     private static final int DEFAULT_LONG_TERM_TOP_K = 8;
@@ -39,14 +44,25 @@ public class ContextMemoryResolver {
         List<ContextMemoryItem> shortTermMemory = resolveShortTerm(conversationId, conversationMessages,
                 limit(shortTerm, DEFAULT_SHORT_TERM_LIMIT));
         List<ContextMemoryItem> longTermMemory = longTerm == null ? List.of()
-                : memoryService.searchLongTerm(chatbotId, userId, latestUserMessage,
-                limit(longTerm, DEFAULT_LONG_TERM_TOP_K), longTerm.minScore());
+            : resolveLongTerm(chatbotId, userId, latestUserMessage,
+            limit(longTerm, DEFAULT_LONG_TERM_TOP_K), longTerm.minScore());
         List<ContextMemoryItem> retrievalResults = retrieval == null ? List.of()
                 : retrieve(chatbotId, conversationId, userId, latestUserMessage, metadata,
                 limit(retrieval, DEFAULT_RETRIEVAL_TOP_K), retrieval.minScore());
 
         return new ContextMemoryBundle(shortTermMemory, longTermMemory, retrievalResults);
     }
+
+        private List<ContextMemoryItem> resolveLongTerm(Long chatbotId, String userId, String query, int topK,
+                                double minScore) {
+        try {
+            return memoryService.searchLongTerm(chatbotId, userId, query, topK, minScore);
+        } catch (IllegalArgumentException | LlmProviderException ex) {
+            log.warn("Long-term memory search skipped for chatbotId={} because vector memory is unavailable: {}",
+                chatbotId, ex.getMessage());
+            return List.of();
+        }
+        }
 
     private List<ContextMemoryItem> resolveShortTerm(Long conversationId, List<Message> conversationMessages,
                                                      int limit) {

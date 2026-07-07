@@ -4,6 +4,7 @@ import { create } from 'zustand';
 import { fetchHealth } from '../api/client';
 import { Composer } from '../components/Composer';
 import { MessageList } from '../components/MessageList';
+import { readRuntimeEnv } from '../runtimeEnv';
 import { useChatSession } from '../services/chat';
 
 interface ChatDraftState {
@@ -18,8 +19,8 @@ const useChatDraft = create<ChatDraftState>((set) => ({
   clearDraft: () => set({ draft: '' }),
 }));
 
-const chatbotId = Number.parseInt(import.meta.env.VITE_CHATBOT_ID ?? '1', 10);
-const chatbotName = import.meta.env.VITE_CHATBOT_NAME ?? 'eChat Assistant';
+const chatbotId = Number.parseInt(readRuntimeEnv('VITE_CHATBOT_ID') ?? '1', 10);
+const chatbotName = readRuntimeEnv('VITE_CHATBOT_NAME') ?? 'eChat Assistant';
 
 export function ChatPage() {
   const { draft, setDraft, clearDraft } = useChatDraft();

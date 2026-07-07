@@ -23,15 +23,18 @@ public class ContextPolicyService {
     private final ModelConfigRepository modelConfigRepository;
     private final ContextPolicyValidator contextPolicyValidator;
     private final ContextEngine contextEngine;
+    private final AuditLogService auditLogService;
 
     public ContextPolicyService(ContextPolicyRepository contextPolicyRepository,
                                 ModelConfigRepository modelConfigRepository,
                                 ContextPolicyValidator contextPolicyValidator,
-                                ContextEngine contextEngine) {
+                                ContextEngine contextEngine,
+                                AuditLogService auditLogService) {
         this.contextPolicyRepository = contextPolicyRepository;
         this.modelConfigRepository = modelConfigRepository;
         this.contextPolicyValidator = contextPolicyValidator;
         this.contextEngine = contextEngine;
+        this.auditLogService = auditLogService;
     }
 
     @Transactional(readOnly = true)
@@ -49,7 +52,9 @@ public class ContextPolicyService {
         contextPolicyValidator.validateAndParse(request.dslContent());
         ContextPolicy contextPolicy = new ContextPolicy();
         apply(contextPolicy, request);
-        return toResponse(contextPolicyRepository.save(contextPolicy));
+        ContextPolicy saved = contextPolicyRepository.save(contextPolicy);
+        auditLogService.recordAdmin("CONTEXT_POLICY_CREATED", "ContextPolicy", saved.getId(), auditMetadata(saved));
+        return toResponse(saved);
     }
 
     @Transactional
@@ -57,7 +62,9 @@ public class ContextPolicyService {
         contextPolicyValidator.validateAndParse(request.dslContent());
         ContextPolicy contextPolicy = find(id);
         apply(contextPolicy, request);
-        return toResponse(contextPolicyRepository.save(contextPolicy));
+        ContextPolicy saved = contextPolicyRepository.save(contextPolicy);
+        auditLogService.recordAdmin("CONTEXT_POLICY_UPDATED", "ContextPolicy", saved.getId(), auditMetadata(saved));
+        return toResponse(saved);
     }
 
     @Transactional(readOnly = true)
@@ -76,7 +83,9 @@ public class ContextPolicyService {
 
     @Transactional
     public void delete(Long id) {
-        contextPolicyRepository.delete(find(id));
+        ContextPolicy contextPolicy = find(id);
+        contextPolicyRepository.delete(contextPolicy);
+        auditLogService.recordAdmin("CONTEXT_POLICY_DELETED", "ContextPolicy", id, auditMetadata(contextPolicy));
     }
 
     private ContextPolicy find(Long id) {
@@ -111,5 +120,15 @@ public class ContextPolicyService {
                 contextPolicy.getCreatedAt(),
                 contextPolicy.getUpdatedAt()
         );
+    }
+
+    private java.util.Map<String, Object> auditMetadata(ContextPolicy contextPolicy) {
+        Long modelId = contextPolicy.getModel() == null ? null : contextPolicy.getModel().getId();
+        java.util.Map<String, Object> metadata = new java.util.LinkedHashMap<>();
+        metadata.put("name", contextPolicy.getName());
+        metadata.put("version", contextPolicy.getVersion());
+        metadata.put("modelId", modelId);
+        metadata.put("enabled", contextPolicy.isEnabled());
+        return metadata;
     }
 }

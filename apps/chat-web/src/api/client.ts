@@ -1,4 +1,6 @@
-const apiBaseUrl = (import.meta.env.VITE_API_BASE_URL ?? '').replace(/\/$/, '');
+import { readRuntimeEnv } from '../runtimeEnv';
+
+const apiBaseUrl = (readRuntimeEnv('VITE_API_BASE_URL') ?? '').replace(/\/$/, '');
 
 const jsonHeaders = {
   'Content-Type': 'application/json',

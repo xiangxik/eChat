@@ -6,8 +6,8 @@ spring:
     name: chatbot-service
   datasource:
     url: jdbc:postgresql://${DB_HOST:localhost}:${DB_PORT:5432}/${DB_NAME:echat}
-    username: ${DB_USERNAME:postgres}
-    password: ${DB_PASSWORD:Test.132}
+    username: ${DB_USERNAME:echat}
+    password: ${DB_PASSWORD:change-me-local-postgres}
   jpa:
     hibernate:
       ddl-auto: validate
@@ -24,6 +24,8 @@ spring:
       host: ${REDIS_HOST:localhost}
       port: ${REDIS_PORT:6379}
       password: ${REDIS_PASSWORD:}
+      repositories:
+        enabled: false
 
 management:
   endpoints:
@@ -58,3 +60,15 @@ echat:
   security:
     api-key-encryption-secret: ${API_KEY_ENCRYPTION_SECRET:dev-only-change-this-32-byte-secret}
     admin-token: ${ADMIN_TOKEN:dev-admin-token}
+    allowed-origins: ${CORS_ALLOWED_ORIGINS:http://localhost:*,http://127.0.0.1:*}
+    chat-rate-limit-per-minute: ${CHAT_RATE_LIMIT_PER_MINUTE:60}
+    admin-rate-limit-per-minute: ${ADMIN_RATE_LIMIT_PER_MINUTE:120}
+    admin-cookie-secure: ${ADMIN_COOKIE_SECURE:false}
+    admin-principals:
+      - actor-id: ${ADMIN_ACTOR_ID:local-admin}
+        display-name: ${ADMIN_DISPLAY_NAME:Local Admin}
+        token: ${ADMIN_TOKEN:dev-admin-token}
+        tenant-id: ${ADMIN_TENANT_ID:default}
+        roles: ${ADMIN_ROLES:ADMIN,AUDITOR}
+        attributes:
+          source: local-config

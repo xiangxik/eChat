@@ -23,17 +23,20 @@ public class ModelConfigService {
     private final ProviderConfigService providerConfigService;
     private final ProviderModelDiscoveryService providerModelDiscoveryService;
     private final LlmProviderClientRegistry clientRegistry;
+    private final AuditLogService auditLogService;
 
     public ModelConfigService(ModelConfigRepository modelConfigRepository,
                               ProviderConfigRepository providerConfigRepository,
                               ProviderConfigService providerConfigService,
                               ProviderModelDiscoveryService providerModelDiscoveryService,
-                              LlmProviderClientRegistry clientRegistry) {
+                              LlmProviderClientRegistry clientRegistry,
+                              AuditLogService auditLogService) {
         this.modelConfigRepository = modelConfigRepository;
         this.providerConfigRepository = providerConfigRepository;
         this.providerConfigService = providerConfigService;
         this.providerModelDiscoveryService = providerModelDiscoveryService;
         this.clientRegistry = clientRegistry;
+        this.auditLogService = auditLogService;
     }
 
     @Transactional(readOnly = true)
@@ -57,19 +60,25 @@ public class ModelConfigService {
     public ModelConfigResponse create(ModelConfigRequest request) {
         ModelConfig modelConfig = new ModelConfig();
         apply(modelConfig, request);
-        return toResponse(modelConfigRepository.save(modelConfig));
+        ModelConfig saved = modelConfigRepository.save(modelConfig);
+        auditLogService.recordAdmin("MODEL_CREATED", "ModelConfig", saved.getId(), auditMetadata(saved));
+        return toResponse(saved);
     }
 
     @Transactional
     public ModelConfigResponse update(Long id, ModelConfigRequest request) {
         ModelConfig modelConfig = find(id);
         apply(modelConfig, request);
-        return toResponse(modelConfigRepository.save(modelConfig));
+        ModelConfig saved = modelConfigRepository.save(modelConfig);
+        auditLogService.recordAdmin("MODEL_UPDATED", "ModelConfig", saved.getId(), auditMetadata(saved));
+        return toResponse(saved);
     }
 
     @Transactional
     public void delete(Long id) {
-        modelConfigRepository.delete(find(id));
+        ModelConfig modelConfig = find(id);
+        modelConfigRepository.delete(modelConfig);
+        auditLogService.recordAdmin("MODEL_DELETED", "ModelConfig", id, auditMetadata(modelConfig));
     }
 
     @Transactional(readOnly = true)
@@ -130,6 +139,16 @@ public class ModelConfigService {
                 modelConfig.isSupportsStreaming(),
                 modelConfig.isEnabled(),
                 modelConfig.getMetadata()
+        );
+    }
+
+    private java.util.Map<String, Object> auditMetadata(ModelConfig modelConfig) {
+        return java.util.Map.of(
+                "providerId", modelConfig.getProvider().getId(),
+                "displayName", modelConfig.getDisplayName(),
+                "modelName", modelConfig.getModelName(),
+                "modelType", modelConfig.getModelType().name(),
+                "enabled", modelConfig.isEnabled()
         );
     }
 }

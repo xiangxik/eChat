@@ -14,11 +14,14 @@ public class ChatbotConfigService {
 
     private final ChatbotConfigRepository chatbotConfigRepository;
     private final ContextPolicyRepository contextPolicyRepository;
+    private final AuditLogService auditLogService;
 
     public ChatbotConfigService(ChatbotConfigRepository chatbotConfigRepository,
-                                ContextPolicyRepository contextPolicyRepository) {
+                                ContextPolicyRepository contextPolicyRepository,
+                                AuditLogService auditLogService) {
         this.chatbotConfigRepository = chatbotConfigRepository;
         this.contextPolicyRepository = contextPolicyRepository;
+        this.auditLogService = auditLogService;
     }
 
     @Transactional(readOnly = true)
@@ -35,19 +38,25 @@ public class ChatbotConfigService {
     public ChatbotConfigResponse create(ChatbotConfigRequest request) {
         ChatbotConfig chatbotConfig = new ChatbotConfig();
         apply(chatbotConfig, request);
-        return toResponse(chatbotConfigRepository.save(chatbotConfig));
+        ChatbotConfig saved = chatbotConfigRepository.save(chatbotConfig);
+        auditLogService.recordAdmin("CHATBOT_CREATED", "ChatbotConfig", saved.getId(), auditMetadata(saved));
+        return toResponse(saved);
     }
 
     @Transactional
     public ChatbotConfigResponse update(Long id, ChatbotConfigRequest request) {
         ChatbotConfig chatbotConfig = find(id);
         apply(chatbotConfig, request);
-        return toResponse(chatbotConfigRepository.save(chatbotConfig));
+        ChatbotConfig saved = chatbotConfigRepository.save(chatbotConfig);
+        auditLogService.recordAdmin("CHATBOT_UPDATED", "ChatbotConfig", saved.getId(), auditMetadata(saved));
+        return toResponse(saved);
     }
 
     @Transactional
     public void delete(Long id) {
-        chatbotConfigRepository.delete(find(id));
+        ChatbotConfig chatbotConfig = find(id);
+        chatbotConfigRepository.delete(chatbotConfig);
+        auditLogService.recordAdmin("CHATBOT_DELETED", "ChatbotConfig", id, auditMetadata(chatbotConfig));
     }
 
     private ChatbotConfig find(Long id) {
@@ -76,5 +85,14 @@ public class ChatbotConfigService {
                 chatbotConfig.getCreatedAt(),
                 chatbotConfig.getUpdatedAt()
         );
+    }
+
+    private java.util.Map<String, Object> auditMetadata(ChatbotConfig chatbotConfig) {
+        Long contextPolicyId = chatbotConfig.getContextPolicy() == null ? null : chatbotConfig.getContextPolicy().getId();
+        java.util.Map<String, Object> metadata = new java.util.LinkedHashMap<>();
+        metadata.put("name", chatbotConfig.getName());
+        metadata.put("contextPolicyId", contextPolicyId);
+        metadata.put("enabled", chatbotConfig.isEnabled());
+        return metadata;
     }
 }

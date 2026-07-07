@@ -1,8 +1,8 @@
 spring:
   datasource:
     url: jdbc:postgresql://${TEST_DB_HOST:${DB_HOST:localhost}}:${TEST_DB_PORT:${DB_PORT:5432}}/${TEST_DB_NAME:${DB_NAME:echat}}?currentSchema=${TEST_DB_SCHEMA:echat_test},public
-    username: ${TEST_DB_USERNAME:${DB_USERNAME:postgres}}
-    password: ${TEST_DB_PASSWORD:${DB_PASSWORD:Test.132}}
+    username: ${TEST_DB_USERNAME:${DB_USERNAME:echat}}
+    password: ${TEST_DB_PASSWORD:${DB_PASSWORD:change-me-local-postgres}}
   flyway:
     enabled: true
     create-schemas: true
@@ -32,3 +32,27 @@ echat:
   security:
     api-key-encryption-secret: test-only-change-this-32-byte-secret
     admin-token: test-admin-token
+    allowed-origins: http://localhost:*,http://127.0.0.1:*
+    chat-rate-limit-per-minute: 1000
+    admin-rate-limit-per-minute: 1000
+    admin-cookie-secure: false
+    admin-principals:
+      - actor-id: test-admin
+        display-name: Test Admin
+        token: test-admin-token
+        tenant-id: tenant-a
+        roles: ADMIN,AUDITOR
+        attributes:
+          department: platform
+      - actor-id: test-viewer
+        display-name: Test Viewer
+        token: test-viewer-token
+        tenant-id: tenant-a
+        roles: VIEWER
+        attributes:
+          department: support
+      - actor-id: tenant-b-admin
+        display-name: Tenant B Admin
+        token: test-tenant-b-token
+        tenant-id: tenant-b
+        roles: ADMIN,AUDITOR

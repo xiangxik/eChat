@@ -21,6 +21,7 @@ public abstract class PostgresIntegrationTest {
 			connection.setAutoCommit(true);
 			statement.execute("""
 					TRUNCATE TABLE
+						audit_logs,
 						messages,
 						conversations,
 						memory_items,

@@ -46,6 +46,7 @@ import static org.springframework.test.web.servlet.result.MockMvcResultMatchers.
 class ProviderModelAdminControllerTest extends PostgresIntegrationTest {
 
     private static final String ADMIN_TOKEN = "test-admin-token";
+    private static final String VIEWER_TOKEN = "test-viewer-token";
     private static final String API_KEY = "sk-admin-secret";
 
     private MockMvc mockMvc;
@@ -71,7 +72,11 @@ class ProviderModelAdminControllerTest extends PostgresIntegrationTest {
                 .andExpect(status().isOk())
                 .andExpect(content().string(containsString("/api/admin/providers/{id}/test-connection")))
                 .andExpect(content().string(containsString("/api/admin/models/options")))
-                .andExpect(content().string(containsString("/api/admin/models/{id}/test-generation")));
+                .andExpect(content().string(containsString("/api/admin/models/{id}/test-generation")))
+                .andExpect(content().string(containsString("AdminToken")))
+                .andExpect(content().string(containsString("X-Admin-Token")))
+                .andExpect(content().string(containsString("AdminSessionCookie")))
+                .andExpect(content().string(containsString("echat_admin_session")));
     }
 
     @Test
@@ -86,6 +91,37 @@ class ProviderModelAdminControllerTest extends PostgresIntegrationTest {
             .andExpect(jsonPath("$[?(@.modelName == 'provider-live-model')]").exists());
     }
 
+        @Test
+        void rbacAllowsViewerReadsButRejectsWrites() throws Exception {
+        mockMvc.perform(get("/api/admin/providers")
+                .header("X-Admin-Token", VIEWER_TOKEN))
+            .andExpect(status().isOk());
+
+        mockMvc.perform(post("/api/admin/providers")
+                .header("X-Admin-Token", VIEWER_TOKEN)
+                .contentType(MediaType.APPLICATION_JSON)
+                .content("""
+                    {
+                      "name":"Viewer Write Attempt",
+                      "type":"OPENAI_COMPATIBLE",
+                      "baseUrl":"http://localhost:8081/v1",
+                      "apiKey":"%s",
+                      "enabled":true
+                    }
+                    """.formatted(API_KEY)))
+            .andExpect(status().isForbidden())
+            .andExpect(content().string(containsString("FORBIDDEN")));
+        }
+
+        @Test
+        void abacRejectsCrossTenantAdminAccess() throws Exception {
+        mockMvc.perform(get("/api/admin/providers")
+                .header("X-Admin-Token", VIEWER_TOKEN)
+                .header("X-Tenant-Id", "tenant-b"))
+            .andExpect(status().isForbidden())
+            .andExpect(content().string(containsString("FORBIDDEN")));
+        }
+
     @Test
     void createsUpdatesListsAndDeletesProviderAndModelWithoutLeakingApiKey() throws Exception {
         Long providerId = createProvider();
@@ -95,6 +131,15 @@ class ProviderModelAdminControllerTest extends PostgresIntegrationTest {
                 .andExpect(status().isOk())
                 .andExpect(jsonPath("$.hasApiKey").value(true))
                 .andExpect(content().string(not(containsString(API_KEY))));
+
+        mockMvc.perform(get("/api/admin/audit-logs")
+                .header("X-Admin-Token", ADMIN_TOKEN))
+            .andExpect(status().isOk())
+            .andExpect(jsonPath("$[?(@.eventType == 'PROVIDER_CREATED')]").exists())
+            .andExpect(jsonPath("$[?(@.eventType == 'PROVIDER_CREATED' && @.actorId == 'test-admin')]").exists())
+            .andExpect(jsonPath("$[?(@.eventType == 'PROVIDER_CREATED' && @.tenantId == 'tenant-a')]").exists())
+            .andExpect(jsonPath("$[?(@.eventType == 'PROVIDER_CREATED' && @.metadata.actorDisplayName == 'Test Admin')]").exists())
+            .andExpect(content().string(not(containsString(API_KEY))));
 
         mockMvc.perform(put("/api/admin/providers/{id}", providerId)
                         .header("X-Admin-Token", ADMIN_TOKEN)

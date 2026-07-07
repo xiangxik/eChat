@@ -1,0 +1,12 @@
+.git
+.idea
+.vscode
+node_modules
+**/node_modules
+**/dist
+**/target
+**/.env
+**/.env.local
+npm-debug.log*
+Dockerfile*
+docker-compose*.yml

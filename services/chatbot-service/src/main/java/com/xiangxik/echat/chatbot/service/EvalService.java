@@ -148,8 +148,15 @@ public class EvalService {
     private Map<String, Object> initialSummary(EvalRunRequest request) {
         Map<String, Object> summary = new LinkedHashMap<>(request.metadata());
         summary.put("maxEstimatedTokens", request.maxEstimatedTokens());
+        summary.put("maxLatencyMillis", request.maxLatencyMillis());
+        summary.put("maxEstimatedCostUsd", request.maxEstimatedCostUsd());
+        summary.put("costPer1kTokensUsd", request.costPer1kTokensUsd());
+        summary.put("goldenReplay", request.goldenReplay() == null || request.goldenReplay());
         summary.put("forbiddenPhrases", request.forbiddenPhrases());
-        summary.put("scorers", List.of("keywordMatch", "nonEmptyAnswer", "maxTokenBudget", "forbiddenPhrase"));
+        summary.put("rubric", request.rubric());
+        summary.put("releaseGate", request.releaseGate());
+        summary.put("scorers", List.of("keywordMatch", "nonEmptyAnswer", "maxTokenBudget", "forbiddenPhrase",
+                "rubricScoring", "latencyBudget", "costBudget"));
         summary.put("llmAsJudge", "reserved");
         return summary;
     }

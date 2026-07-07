@@ -42,6 +42,23 @@ class ContextMemoryResolverTest {
         verify(memoryService).searchLongTerm(10L, "user-1", "vpn down", 2, 0.75);
     }
 
+    @Test
+    void skipsLongTermMemoryWhenEmbeddingSearchIsUnavailable() {
+        ShortTermMemoryCache shortTermMemoryCache = mock(ShortTermMemoryCache.class);
+        MemoryService memoryService = mock(MemoryService.class);
+        when(shortTermMemoryCache.list(20L, 3)).thenReturn(List.of());
+        when(memoryService.searchLongTerm(10L, "user-1", "vpn down", 2, 0.75))
+                .thenThrow(new IllegalArgumentException("No enabled EMBEDDING model configured"));
+        ContextMemoryResolver resolver = new ContextMemoryResolver(shortTermMemoryCache, memoryService, List.of());
+
+        ContextMemoryBundle bundle = resolver.resolve(policy(), 10L, 20L, "user-1", "vpn down",
+                Map.of("channel", "test"), List.<Message>of());
+
+        assertThat(bundle.shortTermMemory()).isEmpty();
+        assertThat(bundle.longTermMemory()).isEmpty();
+        assertThat(bundle.retrievalResults()).isEmpty();
+    }
+
     private ContextPolicyDefinition policy() {
         return new ContextPolicyDefinition(
                 "memory-test",

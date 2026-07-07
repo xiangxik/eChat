@@ -19,10 +19,11 @@ public record ContextPolicyDefinition(
                                      double minScore, boolean optional, int line) {
     }
 
-    public record BudgetReserve(String target, int tokens, int line) {
+    public record BudgetReserve(String target, int tokens, String strategy, int line) {
     }
 
-    public record PolicyRule(String type, String when, String target, String strategy, int line) {
+    public record PolicyRule(String type, String when, String target, String strategy, String minTrust,
+                             double minTrustScore, String pattern, String replacement, int line) {
     }
 
     public record OutputSection(String name, boolean optional, int line) {

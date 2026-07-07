@@ -19,12 +19,14 @@ public class ProviderConfigService {
     private final ProviderConfigRepository providerConfigRepository;
     private final ApiKeyProtector apiKeyProtector;
     private final LlmProviderClientRegistry clientRegistry;
+    private final AuditLogService auditLogService;
 
     public ProviderConfigService(ProviderConfigRepository providerConfigRepository, ApiKeyProtector apiKeyProtector,
-                                 LlmProviderClientRegistry clientRegistry) {
+                                 LlmProviderClientRegistry clientRegistry, AuditLogService auditLogService) {
         this.providerConfigRepository = providerConfigRepository;
         this.apiKeyProtector = apiKeyProtector;
         this.clientRegistry = clientRegistry;
+        this.auditLogService = auditLogService;
     }
 
     @Transactional(readOnly = true)
@@ -41,19 +43,26 @@ public class ProviderConfigService {
     public ProviderConfigResponse create(ProviderConfigRequest request) {
         ProviderConfig providerConfig = new ProviderConfig();
         apply(providerConfig, request);
-        return toResponse(providerConfigRepository.save(providerConfig));
+        ProviderConfig saved = providerConfigRepository.save(providerConfig);
+        auditLogService.recordAdmin("PROVIDER_CREATED", "ProviderConfig", saved.getId(), auditMetadata(saved));
+        return toResponse(saved);
     }
 
     @Transactional
     public ProviderConfigResponse update(Long id, ProviderConfigRequest request) {
         ProviderConfig providerConfig = find(id);
         apply(providerConfig, request);
-        return toResponse(providerConfigRepository.save(providerConfig));
+        ProviderConfig saved = providerConfigRepository.save(providerConfig);
+        auditLogService.recordAdmin("PROVIDER_UPDATED", "ProviderConfig", saved.getId(), auditMetadata(saved));
+        return toResponse(saved);
     }
 
     @Transactional
     public void delete(Long id) {
-        providerConfigRepository.delete(find(id));
+        ProviderConfig providerConfig = find(id);
+        providerConfigRepository.delete(providerConfig);
+        auditLogService.recordAdmin("PROVIDER_DELETED", "ProviderConfig", id,
+                java.util.Map.of("name", providerConfig.getName(), "type", providerConfig.getType().name()));
     }
 
     @Transactional(readOnly = true)
@@ -100,6 +109,16 @@ public class ProviderConfigService {
                 providerConfig.isEnabled(),
                 providerConfig.getCreatedAt(),
                 providerConfig.getUpdatedAt()
+        );
+    }
+
+    private java.util.Map<String, Object> auditMetadata(ProviderConfig providerConfig) {
+        return java.util.Map.of(
+                "name", providerConfig.getName(),
+                "type", providerConfig.getType().name(),
+                "enabled", providerConfig.isEnabled(),
+                "hasApiKey", StringUtils.hasText(providerConfig.getEncryptedApiKey())
+                        || StringUtils.hasText(providerConfig.getApiKeySecretRef())
         );
     }
 

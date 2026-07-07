@@ -18,7 +18,6 @@ import com.xiangxik.echat.chatbot.service.context.ContextMemoryItem;
 import com.xiangxik.echat.chatbot.service.embedding.EmbeddingProviderClient;
 import com.xiangxik.echat.chatbot.service.embedding.EmbeddingProviderClientRegistry;
 import com.xiangxik.echat.chatbot.service.embedding.EmbeddingVector;
-import java.util.Comparator;
 import java.util.LinkedHashMap;
 import java.util.List;
 import java.util.Map;
@@ -27,6 +26,7 @@ import java.util.function.Function;
 import java.util.stream.Collectors;
 import org.springframework.stereotype.Service;
 import org.springframework.transaction.annotation.Transactional;
+import org.springframework.transaction.annotation.Propagation;
 import org.springframework.util.StringUtils;
 
 @Service
@@ -107,7 +107,7 @@ public class MemoryService {
                 .toList();
     }
 
-    @Transactional(readOnly = true)
+    @Transactional(readOnly = true, propagation = Propagation.REQUIRES_NEW)
     public List<ContextMemoryItem> searchLongTerm(Long chatbotId, String userId, String query, Integer topK,
                                                   Double minScore) {
         if (!StringUtils.hasText(query)) {

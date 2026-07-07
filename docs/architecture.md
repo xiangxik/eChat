@@ -86,9 +86,10 @@ Security requirements are designed into the architecture from the first phase:
 - Store API keys encrypted or in a managed secret store.
 - Never return raw secrets through admin APIs.
 - Validate all inbound DTOs.
-- Add RBAC before enabling configuration writes.
+- Resolve admin tokens to real principals with tenant, roles, and attributes before allowing configuration access.
+- Enforce RBAC on admin reads/writes and ABAC tenant checks through `X-Tenant-Id` or `tenantId` scope.
 - Filter sensitive values from prompts, logs, traces, and audit views.
-- Record audit events for provider, model, prompt, and context policy changes.
+- Record audit events for provider, model, prompt, and context policy changes with actor id and tenant id.
 
 ## Observability
 

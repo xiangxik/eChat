@@ -55,6 +55,28 @@ class ContextPolicyParserValidatorEngineTest {
                 .anyMatch(reason -> reason.contains("Reserved tokens exceed maxTokens"));
     }
 
+                @Test
+                void validatorRejectsInvalidRedactPatterns() {
+                                ContextPolicyValidationResult validation = validator.validate("""
+                                                                <contextPolicy name="bad-redact" maxTokens="1000">
+                                                                        <system priority="100">Test.</system>
+                                                                        <variables>
+                                                                                <var name="retrievalResults" source="retrieval.vector" />
+                                                                        </variables>
+                                                                        <rules>
+                                                                                <redact target="retrievalResults" pattern="[" />
+                                                                        </rules>
+                                                                        <output>
+                                                                                <section name="retrievalResults" optional="true" />
+                                                                        </output>
+                                                                </contextPolicy>
+                                                                """);
+
+                                assertThat(validation.valid()).isFalse();
+                                assertThat(validation.errors()).extracting(ContextDslError::reason)
+                                                                .anyMatch(reason -> reason.contains("Invalid redact pattern"));
+                }
+
     @Test
     void engineAssemblesContextWithRulesAndBudget() {
         ContextPolicyDefinition policy = validator.validateAndParse(sampleDsl());
@@ -115,6 +137,44 @@ class ContextPolicyParserValidatorEngineTest {
         assertThat(result.sections()).extracting(ContextSection::name).doesNotContain("retrievalResults");
     }
 
+    @Test
+    void ruleEngineFiltersTrustRedactsSecretsConditionallyIncludesAndEnforcesHardBudgets() {
+        ContextPolicyDefinition policy = validator.validateAndParse(ruleEngineDsl());
+        ContextAssemblyRequest request = new ContextAssemblyRequest(
+                1L,
+                2L,
+                "user-1",
+                "Summarize the rollout risk.",
+                Map.of("environment", "prod"),
+                List.of(),
+                List.of(),
+                List.of(),
+                Map.of(),
+                List.of(
+                        new ContextMemoryItem("Deployment note apiKey=secret-123 should never leak", 0.93,
+                                Map.of("source", "kb-prod", "sourceTrust", "verified", "sensitive", true)),
+                        new ContextMemoryItem("Community forum rumor", 0.95,
+                                Map.of("source", "forum", "sourceTrust", "untrusted")),
+                        new ContextMemoryItem("Trusted but verbose ".repeat(60), 0.91,
+                                Map.of("source", "kb-prod", "sourceTrust", "trusted"))
+                ),
+                List.of(),
+                Map.of("releaseStage", "ga")
+        );
+
+        ContextAssemblyResult result = engine.assemble(policy, request);
+
+        ContextSection retrieval = section(result, "retrievalResults");
+        assertThat(result.sections()).extracting(ContextSection::name).contains("retrievalResults");
+        assertThat(retrieval.content())
+                .contains("[REDACTED_SECRET]")
+                .contains("source=kb-prod")
+                .doesNotContain("secret-123")
+                .doesNotContain("Community forum rumor");
+        assertThat(result.tokenBudgetReport().truncatedSections()).contains("retrievalResults");
+        assertThat(result.tokenBudgetReport().actualTokensBySection().get("retrievalResults")).isLessThanOrEqualTo(80);
+    }
+
     private ContextSection section(ContextAssemblyResult result, String name) {
         return result.sections().stream()
                 .filter(section -> name.equals(section.name()))
@@ -162,4 +222,33 @@ class ContextPolicyParserValidatorEngineTest {
                 </contextPolicy>
                 """;
     }
+
+                private String ruleEngineDsl() {
+                                return """
+                                                                <contextPolicy name="rule-engine-v1" maxTokens="2000">
+                                                                        <system priority="100">Use only trusted enterprise sources.</system>
+
+                                                                        <variables>
+                                                                                <var name="retrievalResults" source="retrieval.vector" topK="8" />
+                                                                                <var name="metadata" source="runtime.metadata" optional="true" />
+                                                                        </variables>
+
+                                                                        <budget>
+                                                                                <reserve target="system" tokens="200" />
+                                                                                <reserve target="retrievalResults" tokens="80" strategy="hard" />
+                                                                        </budget>
+
+                                                                        <rules>
+                                                                                <include when="metadata.environment == 'prod'" target="retrievalResults" />
+                                                                                <filter target="retrievalResults" minTrust="trusted" />
+                                                                                <redact target="retrievalResults" when="item.sensitive == true" pattern="(?i)(apiKey|token|password)=[^\\s]+" replacement="[REDACTED_SECRET]" />
+                                                                        </rules>
+
+                                                                        <output>
+                                                                                <section name="system" />
+                                                                                <section name="retrievalResults" optional="true" />
+                                                                        </output>
+                                                                </contextPolicy>
+                                                                """;
+                }
 }

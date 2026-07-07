@@ -41,6 +41,7 @@ import java.util.Locale;
 import java.util.Map;
 import java.util.Objects;
 import java.util.concurrent.CompletableFuture;
+import io.micrometer.core.instrument.MeterRegistry;
 import org.slf4j.Logger;
 import org.slf4j.LoggerFactory;
 import org.springframework.http.HttpStatus;
@@ -55,6 +56,14 @@ public class ChatRuntimeService {
     private static final Logger log = LoggerFactory.getLogger(ChatRuntimeService.class);
     private static final int MAX_MESSAGE_LENGTH = 8000;
     private static final long SSE_TIMEOUT_MILLIS = 90_000L;
+    private static final List<String> PROMPT_INJECTION_PATTERNS = List.of(
+            "ignore previous instructions",
+            "disregard previous instructions",
+            "reveal the system prompt",
+            "show the system prompt",
+            "print the developer message",
+            "bypass safety rules"
+    );
 
     private final ConversationService conversationService;
     private final MessageService messageService;
@@ -69,6 +78,8 @@ public class ChatRuntimeService {
     private final MemoryExtractionService memoryExtractionService;
     private final ChatCancellationRegistry cancellationRegistry;
     private final TransactionTemplate transactionTemplate;
+    private final AuditLogService auditLogService;
+    private final MeterRegistry meterRegistry;
 
     public ChatRuntimeService(ConversationService conversationService,
                               MessageService messageService,
@@ -82,7 +93,9 @@ public class ChatRuntimeService {
                               ContextMemoryResolver contextMemoryResolver,
                               MemoryExtractionService memoryExtractionService,
                               ChatCancellationRegistry cancellationRegistry,
-                              TransactionTemplate transactionTemplate) {
+                              TransactionTemplate transactionTemplate,
+                              AuditLogService auditLogService,
+                              MeterRegistry meterRegistry) {
         this.conversationService = conversationService;
         this.messageService = messageService;
         this.contextPolicyValidator = contextPolicyValidator;
@@ -96,6 +109,8 @@ public class ChatRuntimeService {
         this.memoryExtractionService = memoryExtractionService;
         this.cancellationRegistry = cancellationRegistry;
         this.transactionTemplate = transactionTemplate;
+        this.auditLogService = auditLogService;
+        this.meterRegistry = meterRegistry;
     }
 
     public ChatConversationCreateResponse createConversation(ChatConversationCreateRequest request,
@@ -109,6 +124,9 @@ public class ChatRuntimeService {
         log.info("audit.chat.conversation.created requestId={} traceId={} conversationId={} chatbotId={} userIdPresent={} remoteAddress={}",
                 context.requestId(), context.traceId(), conversation.getId(), request.chatbotId(),
                 StringUtils.hasText(request.userId()), context.remoteAddress());
+        auditLogService.recordRuntime("CHAT_CONVERSATION_CREATED", "Conversation", conversation.getId(),
+            context.requestId(), context.traceId(), context.remoteAddress(),
+            Map.of("chatbotId", request.chatbotId(), "userIdPresent", StringUtils.hasText(request.userId())));
         if (!metadata.isEmpty()) {
             log.debug("conversation metadata accepted requestId={} keys={}", context.requestId(), metadata.keySet());
         }
@@ -135,22 +153,32 @@ public class ChatRuntimeService {
                                            RuntimeRequestContext context) {
         PreparedInvocation invocation = prepareInvocation(conversationId, request, context);
         LlmProviderClient client = clientRegistry.getClient(invocation.provider().getType());
+        Instant llmStartedAt = Instant.now();
         try {
             LlmChatResponse response = client.chat(invocation.provider(), invocation.model(), invocation.apiKey(),
                     invocation.llmRequest());
             Message assistantMessage = saveAssistantMessage(conversationId, response.content(), context,
                     invocation.contextResult(), response.finishReason(), response.metadata());
-                memoryExtractionService.afterTurn(invocation.conversationResponse().chatbotId(), conversationId,
+            memoryExtractionService.afterTurn(invocation.conversationResponse().chatbotId(), conversationId,
                     invocation.userId(), invocation.userMessage(), assistantMessage);
             log.info("audit.chat.message.completed requestId={} traceId={} conversationId={} userMessageId={} assistantMessageId={} tokens={}",
                     context.requestId(), context.traceId(), conversationId, invocation.userMessage().getId(),
                     assistantMessage.getId(), assistantMessage.getTokenCount());
+            recordLlmMetrics(invocation, Duration.between(llmStartedAt, Instant.now()), "success",
+                    assistantMessage.getTokenCount());
+            auditLogService.recordRuntime("CHAT_MESSAGE_COMPLETED", "Conversation", conversationId,
+                    context.requestId(), context.traceId(), context.remoteAddress(),
+                    Map.of("userMessageId", invocation.userMessage().getId(), "assistantMessageId", assistantMessage.getId(),
+                            "estimatedTokens", assistantMessage.getTokenCount()));
             return new ChatRuntimeResponse(context.requestId(), context.traceId(), invocation.conversationResponse(),
                     toMessageResponse(invocation.userMessage()), toMessageResponse(assistantMessage),
                     invocation.contextResult().tokenBudgetReport(), invocation.contextResult().warnings());
         } catch (LlmProviderException ex) {
             log.warn("audit.chat.message.failed requestId={} traceId={} conversationId={} reason={}",
                     context.requestId(), context.traceId(), conversationId, ex.getMessage());
+            recordLlmMetrics(invocation, Duration.between(llmStartedAt, Instant.now()), "error", 0);
+            auditLogService.recordRuntime("CHAT_MESSAGE_FAILED", "Conversation", conversationId,
+                    context.requestId(), context.traceId(), context.remoteAddress(), Map.of("errorType", ex.getClass().getSimpleName()));
             throw ex;
         }
     }
@@ -191,7 +219,7 @@ public class ChatRuntimeService {
 
             Message assistantMessage = saveAssistantMessage(conversationId, assistantContent.toString(), context,
                     invocation.contextResult(), "stop", Map.of("stream", true));
-                memoryExtractionService.afterTurn(invocation.conversationResponse().chatbotId(), conversationId,
+            memoryExtractionService.afterTurn(invocation.conversationResponse().chatbotId(), conversationId,
                     invocation.userId(), invocation.userMessage(), assistantMessage);
             sessionStateCache.recordStreamState(context.requestId(), "completed");
             send(emitter, "message_end", new ChatStreamEventResponse("message_end", context.requestId(),
@@ -200,11 +228,17 @@ public class ChatRuntimeService {
             log.info("audit.chat.stream.completed requestId={} traceId={} conversationId={} userMessageId={} assistantMessageId={} tokens={}",
                     context.requestId(), context.traceId(), conversationId, invocation.userMessage().getId(),
                     assistantMessage.getId(), assistantMessage.getTokenCount());
+            auditLogService.recordRuntime("CHAT_STREAM_COMPLETED", "Conversation", conversationId,
+                    context.requestId(), context.traceId(), context.remoteAddress(),
+                    Map.of("userMessageId", invocation.userMessage().getId(), "assistantMessageId", assistantMessage.getId(),
+                            "estimatedTokens", assistantMessage.getTokenCount()));
             emitter.complete();
         } catch (Exception ex) {
             sessionStateCache.recordStreamState(context.requestId(), "failed");
             log.warn("audit.chat.stream.failed requestId={} traceId={} conversationId={} reason={}",
                     context.requestId(), context.traceId(), conversationId, ex.getMessage());
+            auditLogService.recordRuntime("CHAT_STREAM_FAILED", "Conversation", conversationId,
+                    context.requestId(), context.traceId(), context.remoteAddress(), Map.of("errorType", ex.getClass().getSimpleName()));
             try {
                 send(emitter, "error", new ChatStreamEventResponse("error", context.requestId(), context.traceId(),
                         conversationId, null, null, null, null, null, Map.of("message", safeErrorMessage(ex))));
@@ -330,7 +364,25 @@ public class ChatRuntimeService {
         if (hasUnsafeControlCharacter) {
             throw new IllegalArgumentException("message contains unsupported control characters");
         }
+        String normalized = message.toLowerCase(Locale.ROOT);
+        boolean suspectedInjection = PROMPT_INJECTION_PATTERNS.stream().anyMatch(normalized::contains);
+        if (suspectedInjection) {
+            throw new IllegalArgumentException("message contains unsupported instruction override patterns");
+        }
         return message;
+    }
+
+    private void recordLlmMetrics(PreparedInvocation invocation, Duration duration, String outcome, int outputTokens) {
+        String provider = invocation.provider().getType().name();
+        String model = invocation.model().getModelName();
+        meterRegistry.timer("echat.llm.chat.duration", "provider", provider, "model", model, "outcome", outcome)
+                .record(duration);
+        meterRegistry.counter("echat.llm.chat.requests", "provider", provider, "model", model, "outcome", outcome)
+                .increment();
+        meterRegistry.summary("echat.llm.chat.estimated_tokens", "provider", provider, "model", model, "kind", "context")
+                .record(invocation.contextResult().tokenBudgetReport().totalEstimatedTokens());
+        meterRegistry.summary("echat.llm.chat.estimated_tokens", "provider", provider, "model", model, "kind", "output")
+                .record(outputTokens);
     }
 
     private Map<String, Object> requestMetadata(Map<String, Object> metadata, RuntimeRequestContext context) {

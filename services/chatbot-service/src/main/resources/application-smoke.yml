@@ -2,7 +2,7 @@ spring:
   datasource:
     url: jdbc:postgresql://${DB_HOST:localhost}:${DB_PORT:5432}/${DB_NAME:echat_smoke}
     username: ${DB_USERNAME:echat}
-    password: ${DB_PASSWORD:Test.132}
+    password: ${DB_PASSWORD:change-me-local-postgres}
   flyway:
     enabled: true
   jpa:

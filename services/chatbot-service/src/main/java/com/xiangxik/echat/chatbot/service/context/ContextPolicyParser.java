@@ -117,6 +117,7 @@ public class ContextPolicyParser {
             budgetReserves.add(new ContextPolicyDefinition.BudgetReserve(
                     requiredAttribute(reserve, "target", dslContent),
                     intAttribute(reserve, "tokens", 0, dslContent),
+                    optionalAttribute(reserve, "strategy", "soft"),
                     lineOf(dslContent, "reserve")));
         }
     }
@@ -124,11 +125,14 @@ public class ContextPolicyParser {
     private void parseRules(Element parent, List<ContextPolicyDefinition.PolicyRule> rules, String dslContent) {
         for (Element rule : childElements(parent)) {
             String type = rule.getTagName();
-            if (!List.of("include", "exclude", "truncate").contains(type)) {
+            if (!List.of("include", "exclude", "truncate", "filter", "redact").contains(type)) {
                 continue;
             }
             rules.add(new ContextPolicyDefinition.PolicyRule(type, rule.getAttribute("when"),
-                    requiredAttribute(rule, "target", dslContent), rule.getAttribute("strategy"), lineOf(dslContent, type)));
+                    requiredAttribute(rule, "target", dslContent), rule.getAttribute("strategy"),
+                    rule.getAttribute("minTrust"), doubleAttribute(rule, "minTrustScore", 0, dslContent),
+                    rule.getAttribute("pattern"), optionalAttribute(rule, "replacement", "[REDACTED]"),
+                    lineOf(dslContent, type)));
         }
     }
 
@@ -150,6 +154,11 @@ public class ContextPolicyParser {
                     element.getTagName(), "Missing required attribute: " + attribute)));
         }
         return value.trim();
+    }
+
+    private String optionalAttribute(Element element, String attribute, String defaultValue) {
+        String value = element.getAttribute(attribute);
+        return value == null || value.isBlank() ? defaultValue : value.trim();
     }
 
     private int intAttribute(Element element, String attribute, int defaultValue, String dslContent) {

@@ -5,6 +5,8 @@ import java.util.LinkedHashMap;
 import java.util.List;
 import java.util.Map;
 import java.util.Set;
+import java.util.regex.Pattern;
+import java.util.regex.PatternSyntaxException;
 import org.springframework.stereotype.Component;
 import org.w3c.dom.Element;
 
@@ -21,11 +23,13 @@ public class ContextPolicyValidator {
             entry("variables", Set.of()),
             entry("var", Set.of("name", "source", "maxMessages", "limit", "topK", "minScore", "optional")),
             entry("budget", Set.of()),
-            entry("reserve", Set.of("target", "tokens")),
+            entry("reserve", Set.of("target", "tokens", "strategy")),
             entry("rules", Set.of()),
             entry("include", Set.of("when", "target")),
             entry("exclude", Set.of("when", "target")),
             entry("truncate", Set.of("target", "strategy")),
+            entry("filter", Set.of("target", "minTrust", "minTrustScore")),
+            entry("redact", Set.of("target", "when", "pattern", "replacement")),
             entry("output", Set.of()),
             entry("section", Set.of("name", "optional"))
     );
@@ -112,6 +116,10 @@ public class ContextPolicyValidator {
                 errors.add(new ContextDslError(reserve.line(), "reserve", "Budget target is not a declared section: "
                         + reserve.target()));
             }
+            if (!List.of("soft", "hard").contains(reserve.strategy())) {
+                errors.add(new ContextDslError(reserve.line(), "reserve", "Unsupported budget strategy: "
+                        + reserve.strategy()));
+            }
             reservedTokens += Math.max(reserve.tokens(), 0);
         }
         if (policy.maxTokens() > 0 && reservedTokens > policy.maxTokens()) {
@@ -128,6 +136,19 @@ public class ContextPolicyValidator {
             }
             if ("truncate".equals(rule.type()) && !List.of("oldest-first").contains(rule.strategy())) {
                 errors.add(new ContextDslError(rule.line(), "truncate", "Unsupported truncate strategy: " + rule.strategy()));
+            }
+            if ("filter".equals(rule.type()) && rule.minTrust().isBlank() && rule.minTrustScore() <= 0) {
+                errors.add(new ContextDslError(rule.line(), "filter", "Filter requires minTrust or minTrustScore"));
+            }
+            if ("redact".equals(rule.type()) && rule.pattern().isBlank()) {
+                errors.add(new ContextDslError(rule.line(), "redact", "Redact requires a pattern"));
+            }
+            if ("redact".equals(rule.type()) && !rule.pattern().isBlank()) {
+                try {
+                    Pattern.compile(rule.pattern());
+                } catch (PatternSyntaxException ex) {
+                    errors.add(new ContextDslError(rule.line(), "redact", "Invalid redact pattern: " + ex.getDescription()));
+                }
             }
         }
 

@@ -64,7 +64,7 @@ public class AdminAuthController {
     private ResponseCookie sessionCookie(String value, Duration maxAge) {
         return ResponseCookie.from(ADMIN_SESSION_COOKIE, value)
                 .httpOnly(true)
-                .secure(false)
+            .secure(properties.security().adminCookieSecure())
                 .sameSite("Lax")
                 .path("/")
                 .maxAge(maxAge)
