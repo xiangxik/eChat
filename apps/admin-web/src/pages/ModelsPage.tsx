@@ -21,7 +21,7 @@ import type { ColumnsType } from 'antd/es/table';
 
 import { adminApi, modelTypes, type ModelConfig, type ModelConfigRequest, type ModelOption } from '../api/admin';
 import { parseJsonObject, renderEmpty, stringifyJson } from './pageUtils';
-import { EnabledTag, ErrorAlert } from './shared';
+import { EnabledControl, ErrorAlert, PageSectionHeader } from './shared';
 
 export function ModelsPage() {
   const { message, modal } = AntApp.useApp();
@@ -149,13 +149,12 @@ export function ModelsPage() {
       render: (_, model) => `T ${model.defaultTemperature ?? '-'} / P ${model.defaultTopP ?? '-'}`,
     },
     { title: 'Streaming', dataIndex: 'supportsStreaming', width: 120, render: (value) => (value ? 'Yes' : 'No') },
-    { title: 'Status', dataIndex: 'enabled', width: 130, render: (enabled) => <EnabledTag enabled={enabled} /> },
     {
-      title: 'Enabled',
+      title: 'Status',
       dataIndex: 'enabled',
-      width: 110,
+      width: 170,
       render: (enabled: boolean, model) => (
-        <Switch checked={enabled} onChange={(checked) => updateMutation.mutate({ model, enabled: checked })} />
+        <EnabledControl enabled={enabled} loading={updateMutation.isPending} onChange={(checked) => updateMutation.mutate({ model, enabled: checked })} />
       ),
     },
     {
@@ -188,21 +187,23 @@ export function ModelsPage() {
   return (
     <div className="page-stack">
       <ErrorAlert error={modelsQuery.error ?? providersQuery.error} />
-      <Card
-        title="Model Management"
-        extra={
+      <Card className="admin-data-card">
+        <PageSectionHeader
+          title="Model Management"
+          actions={
           <Button type="primary" icon={<PlusOutlined />} onClick={openCreate} disabled={!enabledProviders.length}>
             New Model
           </Button>
-        }
-      >
+          }
+        />
         <Table
+          size="middle"
           rowKey="id"
           loading={modelsQuery.isLoading || providersQuery.isLoading}
           dataSource={modelsQuery.data ?? []}
           columns={columns}
           locale={{ emptyText: renderEmpty(enabledProviders.length ? 'No models configured' : 'Enable a provider first') }}
-          scroll={{ x: 1380 }}
+          scroll={{ x: 1300 }}
         />
       </Card>
       <Drawer

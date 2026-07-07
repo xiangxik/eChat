@@ -56,9 +56,53 @@ ReactDOM.createRoot(document.getElementById('root')!).render(
       theme={{
         algorithm: theme.defaultAlgorithm,
         token: {
-          colorPrimary: '#1f7a68',
+          colorPrimary: '#1677a3',
+          colorInfo: '#1677a3',
+          colorSuccess: '#2f8f6b',
+          colorWarning: '#b7791f',
+          colorBgLayout: '#f5f7fb',
+          colorTextBase: '#1f2937',
           borderRadius: 6,
+          controlHeight: 32,
+          controlHeightLG: 36,
+          controlHeightSM: 24,
+          fontSize: 14,
           fontFamily: 'Aptos, Segoe UI, sans-serif',
+        },
+        components: {
+          Button: {
+            controlHeight: 32,
+            borderRadius: 6,
+          },
+          Card: {
+            borderRadiusLG: 8,
+            paddingLG: 14,
+          },
+          Drawer: {
+            paddingLG: 16,
+          },
+          Layout: {
+            bodyBg: '#f5f7fb',
+            headerBg: '#ffffff',
+            siderBg: '#111827',
+          },
+          Menu: {
+            darkItemBg: '#111827',
+            darkSubMenuItemBg: '#111827',
+            darkItemSelectedBg: '#1677a3',
+          },
+          Table: {
+            cellPaddingBlock: 8,
+            cellPaddingBlockMD: 8,
+            cellPaddingInline: 10,
+            cellPaddingInlineMD: 10,
+            headerBg: '#f8fafc',
+            headerColor: '#475569',
+            rowHoverBg: '#f8fafc',
+          },
+          Tag: {
+            borderRadiusSM: 999,
+          },
         },
       }}
     >

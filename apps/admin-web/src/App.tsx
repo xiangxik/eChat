@@ -30,15 +30,56 @@ const useAdminUi = create<AdminUiState>((set) => ({
   setCollapsed: (collapsed) => set({ collapsed }),
 }));
 
-const menuItems = [
-  { key: '/dashboard', icon: <DashboardOutlined />, label: <Link to="/dashboard">Dashboard</Link> },
-  { key: '/providers', icon: <ApiOutlined />, label: <Link to="/providers">Providers</Link> },
-  { key: '/models', icon: <AppstoreOutlined />, label: <Link to="/models">Models</Link> },
-  { key: '/chatbots', icon: <RobotOutlined />, label: <Link to="/chatbots">Chatbots</Link> },
-  { key: '/context-policies', icon: <MessageOutlined />, label: <Link to="/context-policies">Context Policies</Link> },
-  { key: '/evals', icon: <ExperimentOutlined />, label: <Link to="/evals">Eval Harness</Link> },
-  { key: '/audit-logs', icon: <AuditOutlined />, label: <Link to="/audit-logs">Audit Logs</Link> },
+const routeItems = [
+  {
+    key: '/dashboard',
+    icon: <DashboardOutlined />,
+    label: 'Dashboard',
+    title: 'Dashboard',
+  },
+  {
+    key: '/providers',
+    icon: <ApiOutlined />,
+    label: 'Providers',
+    title: 'Provider Management',
+  },
+  {
+    key: '/models',
+    icon: <AppstoreOutlined />,
+    label: 'Models',
+    title: 'Model Management',
+  },
+  {
+    key: '/chatbots',
+    icon: <RobotOutlined />,
+    label: 'Chatbots',
+    title: 'Chatbot Management',
+  },
+  {
+    key: '/context-policies',
+    icon: <MessageOutlined />,
+    label: 'Context Policies',
+    title: 'Context Policies',
+  },
+  {
+    key: '/evals',
+    icon: <ExperimentOutlined />,
+    label: 'Eval Harness',
+    title: 'Eval Harness',
+  },
+  {
+    key: '/audit-logs',
+    icon: <AuditOutlined />,
+    label: 'Audit Logs',
+    title: 'Audit Logs',
+  },
 ];
+
+const menuItems = routeItems.map((item) => ({
+  key: item.key,
+  icon: item.icon,
+  label: <Link to={item.key}>{item.label}</Link>,
+}));
 
 export function App() {
   const { collapsed, setCollapsed } = useAdminUi();
@@ -51,7 +92,7 @@ export function App() {
     token: { colorBgContainer },
   } = theme.useToken();
 
-  const selectedKey = menuItems.find((item) => location.pathname.startsWith(item.key))?.key ?? '/dashboard';
+  const currentRoute = routeItems.find((item) => location.pathname.startsWith(item.key)) ?? routeItems[0];
 
   async function handleLogout() {
     setLoggingOut(true);
@@ -69,18 +110,24 @@ export function App() {
   return (
     <Layout className="admin-shell">
       {contextHolder}
-      <Sider collapsible collapsed={collapsed} onCollapse={setCollapsed} width={252}>
+      <Sider collapsible collapsed={collapsed} onCollapse={setCollapsed} width={224}>
         <div className="brand">
-          <MessageOutlined />
-          {!collapsed && <span>eChat Admin</span>}
+          <span className="brand-mark">
+            <MessageOutlined />
+          </span>
+          {!collapsed && (
+            <span className="brand-copy">
+              <span>eChat</span>
+              <Text>Admin Console</Text>
+            </span>
+          )}
         </div>
-        <Menu theme="dark" mode="inline" selectedKeys={[selectedKey]} items={menuItems} />
+        <Menu theme="dark" mode="inline" selectedKeys={[currentRoute.key]} items={menuItems} />
       </Sider>
       <Layout>
         <Header className="admin-header" style={{ background: colorBgContainer }}>
           <div>
-            <Title level={3}>Chatbot Configuration</Title>
-            <Text type="secondary">Operational controls for providers, models, chatbots, and context policies.</Text>
+            <Title level={3}>{currentRoute.title}</Title>
           </div>
           <Space className="admin-session-control">
             <Text type="secondary">

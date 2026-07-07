@@ -6,7 +6,7 @@ import type { ColumnsType } from 'antd/es/table';
 
 import { adminApi, type ChatbotConfig, type ChatbotConfigRequest } from '../api/admin';
 import { formatDate, renderEmpty } from './pageUtils';
-import { EnabledTag, ErrorAlert } from './shared';
+import { EnabledControl, ErrorAlert, PageSectionHeader } from './shared';
 
 export function ChatbotsPage() {
   const { message } = AntApp.useApp();
@@ -71,13 +71,12 @@ export function ChatbotsPage() {
       width: 220,
       render: (id?: number) => (id ? policyNameById.get(id) ?? `#${id}` : '-'),
     },
-    { title: 'Status', dataIndex: 'enabled', width: 130, render: (enabled) => <EnabledTag enabled={enabled} /> },
     {
-      title: 'Enabled',
+      title: 'Status',
       dataIndex: 'enabled',
-      width: 110,
+      width: 170,
       render: (enabled: boolean, chatbot) => (
-        <Switch checked={enabled} onChange={(checked) => updateMutation.mutate({ chatbot, enabled: checked })} />
+        <EnabledControl enabled={enabled} loading={updateMutation.isPending} onChange={(checked) => updateMutation.mutate({ chatbot, enabled: checked })} />
       ),
     },
     { title: 'Updated', dataIndex: 'updatedAt', width: 190, render: formatDate },
@@ -103,21 +102,23 @@ export function ChatbotsPage() {
   return (
     <div className="page-stack">
       <ErrorAlert error={chatbotsQuery.error ?? policiesQuery.error} />
-      <Card
-        title="Chatbot Management"
-        extra={
+      <Card className="admin-data-card">
+        <PageSectionHeader
+          title="Chatbot Management"
+          actions={
           <Button type="primary" icon={<PlusOutlined />} onClick={openCreate}>
             New Chatbot
           </Button>
-        }
-      >
+          }
+        />
         <Table
+          size="middle"
           rowKey="id"
           loading={chatbotsQuery.isLoading || policiesQuery.isLoading}
           dataSource={chatbotsQuery.data ?? []}
           columns={columns}
           locale={{ emptyText: renderEmpty('No chatbots configured') }}
-          scroll={{ x: 1040 }}
+          scroll={{ x: 960 }}
         />
       </Card>
       <Drawer

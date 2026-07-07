@@ -32,7 +32,7 @@ import {
   type ContextPolicyValidationResult,
 } from '../api/admin';
 import { formatDate, parseJsonObject, renderEmpty, stringifyJson } from './pageUtils';
-import { EnabledTag, ErrorAlert } from './shared';
+import { EnabledControl, ErrorAlert, PageSectionHeader } from './shared';
 
 const { Paragraph, Text } = Typography;
 
@@ -193,13 +193,12 @@ export function ContextPoliciesPage() {
     { title: 'Description', dataIndex: 'description', ellipsis: true, render: (value) => value || '-' },
     { title: 'Model', dataIndex: 'modelId', width: 220, render: (id?: number) => (id ? modelNameById.get(id) ?? `#${id}` : '-') },
     { title: 'Version', dataIndex: 'version', width: 100, render: (value) => <Tag>v{value}</Tag> },
-    { title: 'Status', dataIndex: 'enabled', width: 130, render: (enabled) => <EnabledTag enabled={enabled} /> },
     {
-      title: 'Enabled',
+      title: 'Status',
       dataIndex: 'enabled',
-      width: 110,
+      width: 170,
       render: (enabled: boolean, policy) => (
-        <Switch checked={enabled} onChange={(checked) => updateMutation.mutate({ policy, enabled: checked })} />
+        <EnabledControl enabled={enabled} loading={updateMutation.isPending} onChange={(checked) => updateMutation.mutate({ policy, enabled: checked })} />
       ),
     },
     { title: 'Updated', dataIndex: 'updatedAt', width: 190, render: formatDate },
@@ -225,21 +224,23 @@ export function ContextPoliciesPage() {
   return (
     <div className="page-stack">
       <ErrorAlert error={policiesQuery.error ?? modelsQuery.error} />
-      <Card
-        title="Context Policy Management"
-        extra={
+      <Card className="admin-data-card">
+        <PageSectionHeader
+          title="Context Policy Management"
+          actions={
           <Button type="primary" icon={<PlusOutlined />} onClick={openCreate} disabled={!enabledModels.length}>
             New Policy
           </Button>
-        }
-      >
+          }
+        />
         <Table
+          size="middle"
           rowKey="id"
           loading={policiesQuery.isLoading || modelsQuery.isLoading}
           dataSource={policiesQuery.data ?? []}
           columns={columns}
           locale={{ emptyText: renderEmpty(enabledModels.length ? 'No context policies configured' : 'Enable a model first') }}
-          scroll={{ x: 1340 }}
+          scroll={{ x: 1260 }}
         />
       </Card>
       <Drawer

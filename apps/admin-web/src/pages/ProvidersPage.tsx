@@ -19,7 +19,7 @@ import type { ColumnsType } from 'antd/es/table';
 
 import { adminApi, providerTypes, type ProviderConfig, type ProviderConfigRequest } from '../api/admin';
 import { formatDate, renderEmpty } from './pageUtils';
-import { EnabledTag, ErrorAlert } from './shared';
+import { EnabledControl, ErrorAlert, PageSectionHeader } from './shared';
 
 export function ProvidersPage() {
   const { message, modal } = AntApp.useApp();
@@ -100,19 +100,18 @@ export function ProvidersPage() {
       width: 130,
       render: (hasApiKey: boolean) => <Tag color={hasApiKey ? 'processing' : 'default'}>{hasApiKey ? 'Stored' : 'Not set'}</Tag>,
     },
-    { title: 'Status', dataIndex: 'enabled', width: 130, render: (enabled) => <EnabledTag enabled={enabled} /> },
     {
-      title: 'Enabled',
+      title: 'Status',
       dataIndex: 'enabled',
-      width: 110,
+      width: 170,
       render: (enabled: boolean, provider) => (
-        <Switch checked={enabled} onChange={(checked) => updateMutation.mutate({ provider, enabled: checked })} />
+        <EnabledControl enabled={enabled} loading={updateMutation.isPending} onChange={(checked) => updateMutation.mutate({ provider, enabled: checked })} />
       ),
     },
     { title: 'Updated', dataIndex: 'updatedAt', width: 190, render: formatDate },
     {
       title: 'Actions',
-      width: 260,
+      width: 240,
       fixed: 'right',
       render: (_, provider) => (
         <Space>
@@ -135,21 +134,23 @@ export function ProvidersPage() {
   return (
     <div className="page-stack">
       <ErrorAlert error={providersQuery.error} />
-      <Card
-        title="Provider Management"
-        extra={
+      <Card className="admin-data-card">
+        <PageSectionHeader
+          title="Provider Management"
+          actions={
           <Button type="primary" icon={<PlusOutlined />} onClick={openCreate}>
             New Provider
           </Button>
-        }
-      >
+          }
+        />
         <Table
+          size="middle"
           rowKey="id"
           loading={providersQuery.isLoading}
           dataSource={providersQuery.data ?? []}
           columns={columns}
           locale={{ emptyText: renderEmpty('No providers configured') }}
-          scroll={{ x: 1120 }}
+          scroll={{ x: 1040 }}
         />
       </Card>
       <Drawer

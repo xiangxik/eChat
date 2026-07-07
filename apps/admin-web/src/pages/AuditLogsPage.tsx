@@ -4,10 +4,10 @@ import { Button, Card, Descriptions, Space, Table, Tag, Typography } from 'antd'
 import type { ColumnsType } from 'antd/es/table';
 
 import { adminApi, type AuditLog } from '../api/admin';
-import { ErrorAlert } from './shared';
+import { ErrorAlert, PageSectionHeader } from './shared';
 import { formatDate, renderEmpty, stringifyJson } from './pageUtils';
 
-const { Paragraph, Text, Title } = Typography;
+const { Paragraph, Text } = Typography;
 
 export function AuditLogsPage() {
   const auditLogsQuery = useQuery({ queryKey: ['audit-logs'], queryFn: adminApi.listAuditLogs });
@@ -57,21 +57,20 @@ export function AuditLogsPage() {
   ];
 
   return (
-    <Space direction="vertical" size="large" style={{ width: '100%' }}>
-      <Space align="start" style={{ justifyContent: 'space-between', width: '100%' }}>
-        <div>
-          <Title level={2}>Audit Logs</Title>
-          <Text type="secondary">Recent admin configuration changes and chat runtime events.</Text>
-        </div>
-        <Button icon={<ReloadOutlined />} loading={auditLogsQuery.isFetching} onClick={() => void auditLogsQuery.refetch()}>
-          Refresh
-        </Button>
-      </Space>
-
+    <div className="page-stack">
       <ErrorAlert error={auditLogsQuery.error} />
 
-      <Card>
+      <Card className="admin-data-card">
+        <PageSectionHeader
+          title="Recent Events"
+          actions={
+            <Button icon={<ReloadOutlined />} loading={auditLogsQuery.isFetching} onClick={() => void auditLogsQuery.refetch()}>
+              Refresh
+            </Button>
+          }
+        />
         <Table
+          size="middle"
           rowKey="id"
           columns={columns}
           dataSource={auditLogs}
@@ -92,6 +91,6 @@ export function AuditLogsPage() {
           }}
         />
       </Card>
-    </Space>
+    </div>
   );
 }
