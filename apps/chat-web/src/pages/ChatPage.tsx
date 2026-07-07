@@ -4,6 +4,8 @@ import { create } from 'zustand';
 import { fetchHealth } from '../api/client';
 import { Composer } from '../components/Composer';
 import { MessageList } from '../components/MessageList';
+import { chatCopy, getInitialLocale, persistLocale } from '../i18n';
+import type { Locale } from '../i18n';
 import { readRuntimeEnv } from '../runtimeEnv';
 import { useChatSession } from '../services/chat';
 
@@ -19,14 +21,28 @@ const useChatDraft = create<ChatDraftState>((set) => ({
   clearDraft: () => set({ draft: '' }),
 }));
 
+interface ChatLocaleState {
+  locale: Locale;
+  setLocale: (locale: Locale) => void;
+}
+
+const useChatLocale = create<ChatLocaleState>((set) => ({
+  locale: getInitialLocale(),
+  setLocale: (locale) => {
+    persistLocale(locale);
+    set({ locale });
+  },
+}));
+
 const chatbotId = Number.parseInt(readRuntimeEnv('VITE_CHATBOT_ID') ?? '1', 10);
 const chatbotName = readRuntimeEnv('VITE_CHATBOT_NAME') ?? 'eChat Assistant';
 
 export function ChatPage() {
   const { draft, setDraft, clearDraft } = useChatDraft();
+  const { locale, setLocale } = useChatLocale();
+  const copy = chatCopy[locale];
   const healthQuery = useQuery({ queryKey: ['health'], queryFn: fetchHealth, retry: false });
   const chatSession = useChatSession({ chatbotId: Number.isNaN(chatbotId) ? 1 : chatbotId, chatbotName });
-  const conversationTitle = chatSession.conversation?.title || 'New conversation';
   const apiOnline = healthQuery.data?.status === 'UP';
 
   async function handleSubmit() {
@@ -44,24 +60,53 @@ export function ChatPage() {
       <section className="chat-workspace" aria-label="Chatbot conversation">
         <header className="chat-header">
           <div className="chat-identity">
-            <span className="chatbot-name">{chatbotName}</span>
-            <h1>{conversationTitle}</h1>
+            <span className="assistant-mark" aria-hidden="true">
+              <img src="/brand-icon.svg" alt="" />
+            </span>
+            <div className="chat-identity-copy">
+              <span className="chatbot-name">{chatbotName}</span>
+            </div>
           </div>
           <div className="header-actions">
-            <span className={apiOnline ? 'status-pill status-pill-up' : 'status-pill'}>
-              {apiOnline ? 'API online' : 'API unavailable'}
+            <span
+              className={apiOnline ? 'status-pill status-pill-up' : 'status-pill'}
+              title={apiOnline ? copy.apiOnline : copy.apiUnavailable}
+              aria-label={apiOnline ? copy.apiOnline : copy.apiUnavailable}
+            >
+              <span className="status-dot" aria-hidden="true" />
             </span>
-            <button type="button" className="secondary-button" onClick={chatSession.startNewConversation}>
-              New chat
-            </button>
+            <div className="language-toggle" role="group" aria-label={copy.languageGroupLabel}>
+              <button
+                type="button"
+                className={locale === 'en' ? 'language-option language-option-active' : 'language-option'}
+                onClick={() => setLocale('en')}
+                aria-pressed={locale === 'en'}
+              >
+                EN
+              </button>
+              <span className="language-separator" aria-hidden="true">
+                |
+              </span>
+              <button
+                type="button"
+                className={locale === 'zh' ? 'language-option language-option-active' : 'language-option'}
+                onClick={() => setLocale('zh')}
+                aria-pressed={locale === 'zh'}
+              >
+                中文
+              </button>
+            </div>
           </div>
         </header>
 
         <MessageList
           messages={chatSession.messages}
-          chatbotName={chatbotName}
+          locale={locale}
           isLoading={chatSession.isLoadingMessages}
           isStreaming={chatSession.isStreaming}
+          copy={copy.messageList}
+          messageBubbleCopy={copy.messageBubble}
+          onSuggestionSelect={setDraft}
         />
 
         <Composer
@@ -70,6 +115,7 @@ export function ChatPage() {
           isStreaming={chatSession.isStreaming}
           error={chatSession.error}
           canRetry={Boolean(chatSession.lastUserMessage)}
+          copy={copy.composer}
           onChange={setDraft}
           onSubmit={handleSubmit}
           onStop={chatSession.stopStreaming}

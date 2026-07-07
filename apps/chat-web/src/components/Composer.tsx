@@ -1,4 +1,7 @@
+import { ReloadOutlined, SendOutlined, StopOutlined } from '@ant-design/icons';
 import type { FormEvent, KeyboardEvent } from 'react';
+
+import type { ComposerCopy } from '../i18n';
 
 interface ComposerProps {
   value: string;
@@ -6,6 +9,7 @@ interface ComposerProps {
   isStreaming: boolean;
   error: string | null;
   canRetry: boolean;
+  copy: ComposerCopy;
   onChange: (value: string) => void;
   onSubmit: () => void;
   onStop: () => void;
@@ -18,6 +22,7 @@ export function Composer({
   isStreaming,
   error,
   canRetry,
+  copy,
   onChange,
   onSubmit,
   onStop,
@@ -38,11 +43,11 @@ export function Composer({
   return (
     <div className="composer-wrap">
       {error && (
-        <div className="error-banner" role="alert">
+        <div className="error-banner" role="alert" aria-label={copy.errorLabel}>
           <span>{error}</span>
           {canRetry && (
-            <button type="button" className="ghost-button" onClick={onRetry} disabled={disabled}>
-              Retry
+            <button type="button" className="ghost-button" onClick={onRetry} disabled={disabled} aria-label={copy.retry} title={copy.retry}>
+              <ReloadOutlined />
             </button>
           )}
         </div>
@@ -52,17 +57,27 @@ export function Composer({
           value={value}
           onChange={(event) => onChange(event.target.value)}
           onKeyDown={handleKeyDown}
-          placeholder="Message the chatbot"
-          rows={3}
+          aria-label={copy.inputLabel}
+          placeholder={copy.placeholder}
+          rows={1}
           disabled={disabled && !isStreaming}
         />
         <div className="composer-actions">
-          <button type="button" className="secondary-button" onClick={onStop} disabled={!isStreaming}>
-            Stop
-          </button>
-          <button type="submit" className="primary-button" disabled={disabled || value.trim().length === 0}>
-            {disabled ? 'Sending' : 'Send'}
-          </button>
+          {isStreaming ? (
+            <button type="button" className="primary-button composer-stop-button" onClick={onStop} aria-label={copy.stop} title={copy.stop}>
+              <StopOutlined />
+            </button>
+          ) : (
+            <button
+              type="submit"
+              className="primary-button"
+              disabled={disabled || value.trim().length === 0}
+              aria-label={disabled ? copy.sending : copy.send}
+              title={disabled ? copy.sending : copy.send}
+            >
+              <SendOutlined />
+            </button>
+          )}
         </div>
       </form>
     </div>

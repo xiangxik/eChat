@@ -52,7 +52,6 @@ export function useChatSession({ chatbotId, chatbotName }: ChatSessionOptions) {
   const [messages, setMessages] = useState<ChatMessageView[]>([]);
   const [error, setError] = useState<string | null>(null);
   const [isStreaming, setIsStreaming] = useState(false);
-  const [activeRequestId, setActiveRequestId] = useState<string | null>(null);
   const abortControllerRef = useRef<AbortController | null>(null);
   const lastUserMessageRef = useRef<string | null>(null);
   const messagesQuery = useConversationMessages(conversation?.id);
@@ -122,10 +121,6 @@ export function useChatSession({ chatbotId, chatbotName }: ChatSessionOptions) {
         {
           signal: abortController.signal,
           onEvent: (event) => {
-            if (event.requestId) {
-              setActiveRequestId(event.requestId);
-            }
-
             if (event.type === 'error') {
               throw new Error(readStreamError(event.metadata));
             }
@@ -174,18 +169,8 @@ export function useChatSession({ chatbotId, chatbotName }: ChatSessionOptions) {
       }
     } finally {
       abortControllerRef.current = null;
-      setActiveRequestId(null);
       setIsStreaming(false);
     }
-  }
-
-  function startNewConversation() {
-    abortControllerRef.current?.abort();
-    setConversation(null);
-    setMessages([]);
-    setError(null);
-    setActiveRequestId(null);
-    lastUserMessageRef.current = null;
   }
 
   function stopStreaming() {
@@ -223,10 +208,8 @@ export function useChatSession({ chatbotId, chatbotName }: ChatSessionOptions) {
     isLoadingMessages: messagesQuery.isLoading,
     isSending: isStreaming || createConversationMutation.isPending,
     isStreaming,
-    activeRequestId,
     lastUserMessage: lastUserMessageRef.current,
     submitMessage,
-    startNewConversation,
     stopStreaming,
     retryLastMessage,
   };
