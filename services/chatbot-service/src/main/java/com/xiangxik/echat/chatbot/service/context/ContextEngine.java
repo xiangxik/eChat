@@ -103,16 +103,16 @@ public class ContextEngine {
         return new SectionDraft("USER", content, true, messages);
     }
 
-        private SectionDraft memoryDraft(String name, ContextPolicyDefinition.VariableDefinition variable,
-                         ContextPolicyDefinition policy, List<ContextMemoryItem> items) {
+    private SectionDraft memoryDraft(String name, ContextPolicyDefinition.VariableDefinition variable,
+                                     ContextPolicyDefinition policy, List<ContextMemoryItem> items) {
         List<ContextMemoryItem> filtered = items.stream()
                 .filter(item -> variable.minScore() <= 0 || item.score() >= variable.minScore())
-            .filter(item -> passesTrustRules(name, policy, item))
+                .filter(item -> passesTrustRules(name, policy, item))
                 .limit(firstPositive(variable.topK(), variable.limit(), items.size()))
                 .toList();
         String content = filtered.stream()
-            .map(item -> "- " + redactedItemContent(name, policy, item) + trustLabel(item)
-                + (item.score() > 0 ? " (score=" + item.score() + ")" : ""))
+                .map(item -> "- " + redactedItemContent(name, policy, item) + trustLabel(item)
+                        + (item.score() > 0 ? " (score=" + item.score() + ")" : ""))
                 .collect(Collectors.joining("\n"));
         return new SectionDraft("USER", content.isBlank() ? "" : "[" + name + "]\n" + content, true, List.of());
     }

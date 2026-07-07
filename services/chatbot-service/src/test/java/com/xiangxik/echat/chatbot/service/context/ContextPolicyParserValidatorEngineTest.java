@@ -55,27 +55,27 @@ class ContextPolicyParserValidatorEngineTest {
                 .anyMatch(reason -> reason.contains("Reserved tokens exceed maxTokens"));
     }
 
-                @Test
-                void validatorRejectsInvalidRedactPatterns() {
-                                ContextPolicyValidationResult validation = validator.validate("""
-                                                                <contextPolicy name="bad-redact" maxTokens="1000">
-                                                                        <system priority="100">Test.</system>
-                                                                        <variables>
-                                                                                <var name="retrievalResults" source="retrieval.vector" />
-                                                                        </variables>
-                                                                        <rules>
-                                                                                <redact target="retrievalResults" pattern="[" />
-                                                                        </rules>
-                                                                        <output>
-                                                                                <section name="retrievalResults" optional="true" />
-                                                                        </output>
-                                                                </contextPolicy>
-                                                                """);
+    @Test
+    void validatorRejectsInvalidRedactPatterns() {
+        ContextPolicyValidationResult validation = validator.validate("""
+                <contextPolicy name="bad-redact" maxTokens="1000">
+                        <system priority="100">Test.</system>
+                        <variables>
+                                <var name="retrievalResults" source="retrieval.vector" />
+                        </variables>
+                        <rules>
+                                <redact target="retrievalResults" pattern="[" />
+                        </rules>
+                        <output>
+                                <section name="retrievalResults" optional="true" />
+                        </output>
+                </contextPolicy>
+                """);
 
-                                assertThat(validation.valid()).isFalse();
-                                assertThat(validation.errors()).extracting(ContextDslError::reason)
-                                                                .anyMatch(reason -> reason.contains("Invalid redact pattern"));
-                }
+        assertThat(validation.valid()).isFalse();
+        assertThat(validation.errors()).extracting(ContextDslError::reason)
+                .anyMatch(reason -> reason.contains("Invalid redact pattern"));
+    }
 
     @Test
     void engineAssemblesContextWithRulesAndBudget() {

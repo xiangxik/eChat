@@ -1,16 +1,14 @@
 package com.xiangxik.echat.chatbot.api.admin;
 
+import com.xiangxik.echat.chatbot.security.AdminAuthenticationFactory;
 import com.xiangxik.echat.chatbot.security.AdminAccessPolicy;
 import com.xiangxik.echat.chatbot.security.AdminPrincipal;
 import com.xiangxik.echat.chatbot.security.AdminPrincipalResolver;
 import jakarta.servlet.http.HttpServletRequest;
 import jakarta.servlet.http.HttpServletResponse;
 import java.util.Optional;
-import java.util.stream.Collectors;
 import org.springframework.http.HttpHeaders;
 import org.springframework.http.MediaType;
-import org.springframework.security.authentication.UsernamePasswordAuthenticationToken;
-import org.springframework.security.core.authority.SimpleGrantedAuthority;
 import org.springframework.security.core.context.SecurityContextHolder;
 import org.springframework.stereotype.Component;
 import org.springframework.web.servlet.HandlerInterceptor;
@@ -22,10 +20,14 @@ public class AdminTokenInterceptor implements HandlerInterceptor {
     private static final String INTERCEPTOR_AUTHENTICATED = AdminTokenInterceptor.class.getName() + ".authenticated";
 
     private final AdminPrincipalResolver adminPrincipalResolver;
+    private final AdminAuthenticationFactory adminAuthenticationFactory;
     private final AdminAccessPolicy adminAccessPolicy;
 
-    public AdminTokenInterceptor(AdminPrincipalResolver adminPrincipalResolver, AdminAccessPolicy adminAccessPolicy) {
+    public AdminTokenInterceptor(AdminPrincipalResolver adminPrincipalResolver,
+                                 AdminAuthenticationFactory adminAuthenticationFactory,
+                                 AdminAccessPolicy adminAccessPolicy) {
         this.adminPrincipalResolver = adminPrincipalResolver;
+        this.adminAuthenticationFactory = adminAuthenticationFactory;
         this.adminAccessPolicy = adminAccessPolicy;
     }
 
@@ -37,7 +39,7 @@ public class AdminTokenInterceptor implements HandlerInterceptor {
 
         Optional<AdminPrincipal> principal = adminPrincipalResolver.resolve(request);
         if (principal.isPresent()) {
-            setAuthentication(principal.get());
+            SecurityContextHolder.getContext().setAuthentication(adminAuthenticationFactory.create(principal.get()));
             request.setAttribute(INTERCEPTOR_AUTHENTICATED, true);
         } else if (SecurityContextHolder.getContext().getAuthentication() != null) {
             SecurityContextHolder.clearContext();
@@ -63,13 +65,5 @@ public class AdminTokenInterceptor implements HandlerInterceptor {
         if (Boolean.TRUE.equals(request.getAttribute(INTERCEPTOR_AUTHENTICATED))) {
             SecurityContextHolder.clearContext();
         }
-    }
-
-    private void setAuthentication(AdminPrincipal principal) {
-        SecurityContextHolder.getContext().setAuthentication(new UsernamePasswordAuthenticationToken(principal, "N/A",
-                principal.roles().stream()
-                        .map(role -> "ROLE_" + role)
-                        .map(SimpleGrantedAuthority::new)
-                        .collect(Collectors.toUnmodifiableSet())));
     }
 }

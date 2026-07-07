@@ -44,8 +44,8 @@ public class ContextMemoryResolver {
         List<ContextMemoryItem> shortTermMemory = resolveShortTerm(conversationId, conversationMessages,
                 limit(shortTerm, DEFAULT_SHORT_TERM_LIMIT));
         List<ContextMemoryItem> longTermMemory = longTerm == null ? List.of()
-            : resolveLongTerm(chatbotId, userId, latestUserMessage,
-            limit(longTerm, DEFAULT_LONG_TERM_TOP_K), longTerm.minScore());
+                : resolveLongTerm(chatbotId, userId, latestUserMessage,
+                limit(longTerm, DEFAULT_LONG_TERM_TOP_K), longTerm.minScore());
         List<ContextMemoryItem> retrievalResults = retrieval == null ? List.of()
                 : retrieve(chatbotId, conversationId, userId, latestUserMessage, metadata,
                 limit(retrieval, DEFAULT_RETRIEVAL_TOP_K), retrieval.minScore());
@@ -53,16 +53,16 @@ public class ContextMemoryResolver {
         return new ContextMemoryBundle(shortTermMemory, longTermMemory, retrievalResults);
     }
 
-        private List<ContextMemoryItem> resolveLongTerm(Long chatbotId, String userId, String query, int topK,
-                                double minScore) {
+    private List<ContextMemoryItem> resolveLongTerm(Long chatbotId, String userId, String query, int topK,
+                                                    double minScore) {
         try {
             return memoryService.searchLongTerm(chatbotId, userId, query, topK, minScore);
         } catch (IllegalArgumentException | LlmProviderException ex) {
             log.warn("Long-term memory search skipped for chatbotId={} because vector memory is unavailable: {}",
-                chatbotId, ex.getMessage());
+                    chatbotId, ex.getMessage());
             return List.of();
         }
-        }
+    }
 
     private List<ContextMemoryItem> resolveShortTerm(Long conversationId, List<Message> conversationMessages,
                                                      int limit) {

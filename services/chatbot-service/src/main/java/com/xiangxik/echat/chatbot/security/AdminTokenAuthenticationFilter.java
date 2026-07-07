@@ -5,7 +5,6 @@ import jakarta.servlet.ServletException;
 import jakarta.servlet.http.HttpServletRequest;
 import jakarta.servlet.http.HttpServletResponse;
 import java.io.IOException;
-import org.springframework.security.authentication.UsernamePasswordAuthenticationToken;
 import org.springframework.security.core.context.SecurityContextHolder;
 import org.springframework.stereotype.Component;
 import org.springframework.web.filter.OncePerRequestFilter;
@@ -14,9 +13,12 @@ import org.springframework.web.filter.OncePerRequestFilter;
 public class AdminTokenAuthenticationFilter extends OncePerRequestFilter {
 
     private final AdminPrincipalResolver adminPrincipalResolver;
+    private final AdminAuthenticationFactory adminAuthenticationFactory;
 
-    public AdminTokenAuthenticationFilter(AdminPrincipalResolver adminPrincipalResolver) {
+    public AdminTokenAuthenticationFilter(AdminPrincipalResolver adminPrincipalResolver,
+                                          AdminAuthenticationFactory adminAuthenticationFactory) {
         this.adminPrincipalResolver = adminPrincipalResolver;
+        this.adminAuthenticationFactory = adminAuthenticationFactory;
     }
 
     @Override
@@ -24,10 +26,7 @@ public class AdminTokenAuthenticationFilter extends OncePerRequestFilter {
             throws ServletException, IOException {
         if (isAdminRequest(request)) {
             adminPrincipalResolver.resolve(request).ifPresent(principal -> SecurityContextHolder.getContext()
-                .setAuthentication(new UsernamePasswordAuthenticationToken(principal, "N/A",
-                    principal.roles().stream().map(role -> "ROLE_" + role)
-                        .map(org.springframework.security.core.authority.SimpleGrantedAuthority::new)
-                        .toList())));
+                    .setAuthentication(adminAuthenticationFactory.create(principal)));
         }
 
         filterChain.doFilter(request, response);

@@ -88,39 +88,39 @@ class ProviderModelAdminControllerTest extends PostgresIntegrationTest {
                         .header("X-Admin-Token", ADMIN_TOKEN))
                 .andExpect(status().isOk())
                 .andExpect(jsonPath("$[?(@.modelName == 'gpt-4.1')]").exists())
-            .andExpect(jsonPath("$[?(@.modelName == 'provider-live-model')]").exists());
+                .andExpect(jsonPath("$[?(@.modelName == 'provider-live-model')]").exists());
     }
 
-        @Test
-        void rbacAllowsViewerReadsButRejectsWrites() throws Exception {
+    @Test
+    void rbacAllowsViewerReadsButRejectsWrites() throws Exception {
         mockMvc.perform(get("/api/admin/providers")
-                .header("X-Admin-Token", VIEWER_TOKEN))
-            .andExpect(status().isOk());
+                        .header("X-Admin-Token", VIEWER_TOKEN))
+                .andExpect(status().isOk());
 
         mockMvc.perform(post("/api/admin/providers")
-                .header("X-Admin-Token", VIEWER_TOKEN)
-                .contentType(MediaType.APPLICATION_JSON)
-                .content("""
-                    {
-                      "name":"Viewer Write Attempt",
-                      "type":"OPENAI_COMPATIBLE",
-                      "baseUrl":"http://localhost:8081/v1",
-                      "apiKey":"%s",
-                      "enabled":true
-                    }
-                    """.formatted(API_KEY)))
-            .andExpect(status().isForbidden())
-            .andExpect(content().string(containsString("FORBIDDEN")));
-        }
+                        .header("X-Admin-Token", VIEWER_TOKEN)
+                        .contentType(MediaType.APPLICATION_JSON)
+                        .content("""
+                                {
+                                  "name":"Viewer Write Attempt",
+                                  "type":"OPENAI_COMPATIBLE",
+                                  "baseUrl":"http://localhost:8081/v1",
+                                  "apiKey":"%s",
+                                  "enabled":true
+                                }
+                                """.formatted(API_KEY)))
+                .andExpect(status().isForbidden())
+                .andExpect(content().string(containsString("FORBIDDEN")));
+    }
 
-        @Test
-        void abacRejectsCrossTenantAdminAccess() throws Exception {
+    @Test
+    void abacRejectsCrossTenantAdminAccess() throws Exception {
         mockMvc.perform(get("/api/admin/providers")
-                .header("X-Admin-Token", VIEWER_TOKEN)
-                .header("X-Tenant-Id", "tenant-b"))
-            .andExpect(status().isForbidden())
-            .andExpect(content().string(containsString("FORBIDDEN")));
-        }
+                        .header("X-Admin-Token", VIEWER_TOKEN)
+                        .header("X-Tenant-Id", "tenant-b"))
+                .andExpect(status().isForbidden())
+                .andExpect(content().string(containsString("FORBIDDEN")));
+    }
 
     @Test
     void createsUpdatesListsAndDeletesProviderAndModelWithoutLeakingApiKey() throws Exception {

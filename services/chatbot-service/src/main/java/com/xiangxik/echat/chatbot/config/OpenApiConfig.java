@@ -4,7 +4,6 @@ import com.xiangxik.echat.chatbot.api.admin.AdminAuthController;
 import com.xiangxik.echat.chatbot.api.admin.AdminTokenInterceptor;
 import io.swagger.v3.oas.models.Components;
 import io.swagger.v3.oas.models.OpenAPI;
-import io.swagger.v3.oas.models.Operation;
 import io.swagger.v3.oas.models.info.Info;
 import io.swagger.v3.oas.models.media.StringSchema;
 import io.swagger.v3.oas.models.parameters.Parameter;
