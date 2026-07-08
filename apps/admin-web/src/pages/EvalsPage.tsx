@@ -35,6 +35,8 @@ import { formatDate, parseJsonObject, renderEmpty, stringifyJson } from './pageU
 import { ErrorAlert } from './shared';
 
 const { Paragraph, Text } = Typography;
+const EVAL_DATASET_SCROLL_Y = 'calc(100vh - 162px)';
+const EVAL_PANEL_SCROLL_Y = '34vh';
 
 export function EvalsPage() {
   const { message } = AntApp.useApp();
@@ -185,60 +187,74 @@ export function EvalsPage() {
   return (
     <div className="page-stack">
       <ErrorAlert error={datasetsQuery.error ?? chatbotsQuery.error ?? casesQuery.error ?? runQuery.error ?? resultsQuery.error} />
-      <Card
-        title="Eval Dataset Management"
-        extra={
-          <Button type="primary" icon={<PlusOutlined />} onClick={openDatasetDrawer} disabled={!enabledChatbots(chatbotsQuery.data).length}>
-            New Dataset
-          </Button>
-        }
-      >
-        <Table
-          rowKey="id"
-          loading={datasetsQuery.isLoading || chatbotsQuery.isLoading}
-          dataSource={datasetsQuery.data ?? []}
-          columns={datasetColumns}
-          rowClassName={(dataset) => (dataset.id === selectedDatasetId ? 'selected-table-row' : '')}
-          locale={{ emptyText: renderEmpty(enabledChatbots(chatbotsQuery.data).length ? 'No eval datasets configured' : 'Enable a chatbot first') }}
-          scroll={{ x: 1040 }}
-        />
-      </Card>
-
-      <Card
-        title={selectedDataset ? `Cases: ${selectedDataset.name}` : 'Eval Cases'}
-        extra={
-          <Space>
-            <Button icon={<PlusOutlined />} disabled={!selectedDatasetId} onClick={openCaseDrawer}>
-              New Case
+      <div className="eval-workspace">
+        <Card
+          size="small"
+          className="eval-card eval-dataset-card"
+          title="Datasets"
+          extra={
+            <Button type="primary" icon={<PlusOutlined />} onClick={openDatasetDrawer} disabled={!enabledChatbots(chatbotsQuery.data).length}>
+              New Dataset
             </Button>
-            <Button type="primary" icon={<PlayCircleOutlined />} disabled={!selectedDataset} onClick={() => selectedDataset && openRunDrawer(selectedDataset)}>
-              Run Dataset
-            </Button>
-          </Space>
-        }
-      >
-        <Table
-          rowKey="id"
-          loading={casesQuery.isLoading}
-          dataSource={casesQuery.data ?? []}
-          columns={caseColumns}
-          locale={{ emptyText: renderEmpty(selectedDatasetId ? 'No cases in this dataset' : 'Select a dataset') }}
-          scroll={{ x: 900 }}
-        />
-      </Card>
+          }
+        >
+          <Table
+            size="small"
+            rowKey="id"
+            loading={datasetsQuery.isLoading || chatbotsQuery.isLoading}
+            dataSource={datasetsQuery.data ?? []}
+            columns={datasetColumns}
+            rowClassName={(dataset) => (dataset.id === selectedDatasetId ? 'selected-table-row' : '')}
+            locale={{ emptyText: renderEmpty(enabledChatbots(chatbotsQuery.data).length ? 'No eval datasets configured' : 'Enable a chatbot first') }}
+            pagination={{ size: 'small' }}
+            scroll={{ x: 1040, y: EVAL_DATASET_SCROLL_Y }}
+          />
+        </Card>
 
-      <Card title="Current Eval Run" extra={runQuery.data ? <RunStatusTag status={runQuery.data.status} /> : null}>
-        {runQuery.data ? <RunSummary run={runQuery.data} /> : <Text type="secondary">Start a dataset run to inspect status and results.</Text>}
-        <Table
-          className="eval-results-table"
-          rowKey="id"
-          loading={resultsQuery.isLoading || isRunActive(runQuery.data)}
-          dataSource={resultsQuery.data ?? []}
-          columns={resultColumns}
-          locale={{ emptyText: renderEmpty(activeRunId ? 'No results yet' : 'No active eval run') }}
-          scroll={{ x: 980 }}
-        />
-      </Card>
+        <div className="eval-main-panels">
+          <Card
+            size="small"
+            className="eval-card"
+            title={selectedDataset ? `Cases: ${selectedDataset.name}` : 'Cases'}
+            extra={
+              <Space>
+                <Button icon={<PlusOutlined />} disabled={!selectedDatasetId} onClick={openCaseDrawer}>
+                  New Case
+                </Button>
+                <Button type="primary" icon={<PlayCircleOutlined />} disabled={!selectedDataset} onClick={() => selectedDataset && openRunDrawer(selectedDataset)}>
+                  Run Dataset
+                </Button>
+              </Space>
+            }
+          >
+            <Table
+              size="small"
+              rowKey="id"
+              loading={casesQuery.isLoading}
+              dataSource={casesQuery.data ?? []}
+              columns={caseColumns}
+              locale={{ emptyText: renderEmpty(selectedDatasetId ? 'No cases in this dataset' : 'Select a dataset') }}
+              pagination={{ size: 'small' }}
+              scroll={{ x: 900, y: EVAL_PANEL_SCROLL_Y }}
+            />
+          </Card>
+
+          <Card size="small" className="eval-card" title="Current Run" extra={runQuery.data ? <RunStatusTag status={runQuery.data.status} /> : null}>
+            {runQuery.data ? <RunSummary run={runQuery.data} /> : <Text type="secondary">Start a dataset run to inspect status and results.</Text>}
+            <Table
+              size="small"
+              className="eval-results-table"
+              rowKey="id"
+              loading={resultsQuery.isLoading || isRunActive(runQuery.data)}
+              dataSource={resultsQuery.data ?? []}
+              columns={resultColumns}
+              locale={{ emptyText: renderEmpty(activeRunId ? 'No results yet' : 'No active eval run') }}
+              pagination={{ size: 'small' }}
+              scroll={{ x: 980, y: EVAL_PANEL_SCROLL_Y }}
+            />
+          </Card>
+        </div>
+      </div>
 
       <Drawer
         title="New Eval Dataset"

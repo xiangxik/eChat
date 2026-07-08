@@ -2,7 +2,9 @@ import { CheckCircleOutlined, CloseCircleOutlined } from '@ant-design/icons';
 import { Alert, Space, Switch, Tag, Typography } from 'antd';
 import type { ReactNode } from 'react';
 
-const { Title } = Typography;
+const { Text } = Typography;
+
+export const ADMIN_TABLE_SCROLL_Y = 'calc(100vh - 148px)';
 
 export function EnabledTag({ enabled }: { enabled: boolean }) {
   return enabled ? (
@@ -27,9 +29,7 @@ export function ErrorAlert({ error }: { error: unknown }) {
 export function PageSectionHeader({ title, actions }: { title: string; actions?: ReactNode }) {
   return (
     <div className="section-header">
-      <div>
-        <Title level={4}>{title}</Title>
-      </div>
+      <Text className="section-title" type="secondary">{title}</Text>
       {actions && <Space className="section-actions">{actions}</Space>}
     </div>
   );

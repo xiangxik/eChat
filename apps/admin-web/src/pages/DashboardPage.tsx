@@ -55,6 +55,7 @@ export function DashboardPage() {
           }
         />
         <Table
+          size="small"
           rowKey="key"
           pagination={false}
           dataSource={readinessRows}

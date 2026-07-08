@@ -6,7 +6,7 @@ import type { ColumnsType } from 'antd/es/table';
 
 import { adminApi, type ChatbotConfig, type ChatbotConfigRequest } from '../api/admin';
 import { formatDate, renderEmpty } from './pageUtils';
-import { EnabledControl, ErrorAlert, PageSectionHeader } from './shared';
+import { ADMIN_TABLE_SCROLL_Y, EnabledControl, ErrorAlert, PageSectionHeader } from './shared';
 
 export function ChatbotsPage() {
   const { message } = AntApp.useApp();
@@ -106,19 +106,20 @@ export function ChatbotsPage() {
         <PageSectionHeader
           title="Chatbot Management"
           actions={
-          <Button type="primary" icon={<PlusOutlined />} onClick={openCreate}>
-            New Chatbot
-          </Button>
+            <Button type="primary" icon={<PlusOutlined />} onClick={openCreate}>
+              New Chatbot
+            </Button>
           }
         />
         <Table
-          size="middle"
+          size="small"
           rowKey="id"
           loading={chatbotsQuery.isLoading || policiesQuery.isLoading}
           dataSource={chatbotsQuery.data ?? []}
           columns={columns}
           locale={{ emptyText: renderEmpty('No chatbots configured') }}
-          scroll={{ x: 960 }}
+          pagination={{ size: 'small' }}
+          scroll={{ x: 960, y: ADMIN_TABLE_SCROLL_Y }}
         />
       </Card>
       <Drawer

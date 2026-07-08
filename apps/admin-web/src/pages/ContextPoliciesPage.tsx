@@ -32,7 +32,7 @@ import {
   type ContextPolicyValidationResult,
 } from '../api/admin';
 import { formatDate, parseJsonObject, renderEmpty, stringifyJson } from './pageUtils';
-import { EnabledControl, ErrorAlert, PageSectionHeader } from './shared';
+import { ADMIN_TABLE_SCROLL_Y, EnabledControl, ErrorAlert, PageSectionHeader } from './shared';
 
 const { Paragraph, Text } = Typography;
 
@@ -228,25 +228,27 @@ export function ContextPoliciesPage() {
         <PageSectionHeader
           title="Context Policy Management"
           actions={
-          <Button type="primary" icon={<PlusOutlined />} onClick={openCreate} disabled={!enabledModels.length}>
-            New Policy
-          </Button>
+            <Button type="primary" icon={<PlusOutlined />} onClick={openCreate} disabled={!enabledModels.length}>
+              New Policy
+            </Button>
           }
         />
         <Table
-          size="middle"
+          size="small"
           rowKey="id"
           loading={policiesQuery.isLoading || modelsQuery.isLoading}
           dataSource={policiesQuery.data ?? []}
           columns={columns}
           locale={{ emptyText: renderEmpty(enabledModels.length ? 'No context policies configured' : 'Enable a model first') }}
-          scroll={{ x: 1260 }}
+          pagination={{ size: 'small' }}
+          scroll={{ x: 1260, y: ADMIN_TABLE_SCROLL_Y }}
         />
       </Card>
       <Drawer
         title={editingPolicy ? 'Edit Context Policy' : 'New Context Policy'}
         open={drawerOpen}
         width="min(1120px, 94vw)"
+        className="policy-drawer"
         destroyOnClose
         onClose={() => setDrawerOpen(false)}
         extra={
@@ -263,7 +265,7 @@ export function ContextPoliciesPage() {
           </Space>
         }
       >
-        <Form form={form} layout="vertical" initialValues={{ version: 1, enabled: true }} onFinish={saveMutation.mutate}>
+        <Form className="policy-drawer-form" form={form} layout="vertical" initialValues={{ version: 1, enabled: true }} onFinish={saveMutation.mutate}>
           <Tabs
             items={[
               {
@@ -271,7 +273,7 @@ export function ContextPoliciesPage() {
                 label: 'Policy DSL',
                 children: (
                   <div className="policy-editor-grid">
-                    <div>
+                    <div className="policy-editor-main">
                       <Form.Item name="name" label="Policy Name" rules={[{ required: true, max: 160 }]}>
                         <Input placeholder="Support Bot Context" />
                       </Form.Item>
@@ -294,7 +296,7 @@ export function ContextPoliciesPage() {
                         </Form.Item>
                       </Space>
                       <Form.Item name="dslContent" label="DSL Content" rules={[{ required: true }]}>
-                        <Input.TextArea rows={26} className="dsl-editor" spellCheck={false} />
+                        <Input.TextArea className="dsl-editor policy-textarea" spellCheck={false} />
                       </Form.Item>
                     </div>
                     <ValidationPanel result={validationResult} />
@@ -306,9 +308,9 @@ export function ContextPoliciesPage() {
                 label: 'Preview',
                 children: (
                   <div className="policy-preview-grid">
-                    <Card size="small" title="Preview Input">
+                    <Card size="small" title="Preview Input" className="policy-preview-input-card">
                       <Form.Item name="previewJson" noStyle>
-                        <Input.TextArea rows={24} className="json-editor" spellCheck={false} />
+                        <Input.TextArea className="json-editor policy-textarea" spellCheck={false} />
                       </Form.Item>
                     </Card>
                     <PreviewPanel result={previewResult} />

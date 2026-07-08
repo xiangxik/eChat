@@ -21,7 +21,7 @@ import type { ColumnsType } from 'antd/es/table';
 
 import { adminApi, modelTypes, type ModelConfig, type ModelConfigRequest, type ModelOption } from '../api/admin';
 import { parseJsonObject, renderEmpty, stringifyJson } from './pageUtils';
-import { EnabledControl, ErrorAlert, PageSectionHeader } from './shared';
+import { ADMIN_TABLE_SCROLL_Y, EnabledControl, ErrorAlert, PageSectionHeader } from './shared';
 
 export function ModelsPage() {
   const { message, modal } = AntApp.useApp();
@@ -191,19 +191,20 @@ export function ModelsPage() {
         <PageSectionHeader
           title="Model Management"
           actions={
-          <Button type="primary" icon={<PlusOutlined />} onClick={openCreate} disabled={!enabledProviders.length}>
-            New Model
-          </Button>
+            <Button type="primary" icon={<PlusOutlined />} onClick={openCreate} disabled={!enabledProviders.length}>
+              New Model
+            </Button>
           }
         />
         <Table
-          size="middle"
+          size="small"
           rowKey="id"
           loading={modelsQuery.isLoading || providersQuery.isLoading}
           dataSource={modelsQuery.data ?? []}
           columns={columns}
           locale={{ emptyText: renderEmpty(enabledProviders.length ? 'No models configured' : 'Enable a provider first') }}
-          scroll={{ x: 1300 }}
+          pagination={{ size: 'small' }}
+          scroll={{ x: 1300, y: ADMIN_TABLE_SCROLL_Y }}
         />
       </Card>
       <Drawer

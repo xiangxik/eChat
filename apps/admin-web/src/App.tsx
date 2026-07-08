@@ -9,7 +9,7 @@ import {
   RobotOutlined,
   UserOutlined,
 } from '@ant-design/icons';
-import { Button, Layout, Menu, Space, theme, Typography, message } from 'antd';
+import { Button, Layout, Menu, Space, Typography, message } from 'antd';
 import { useQueryClient } from '@tanstack/react-query';
 import { useState } from 'react';
 import { Link, Outlet, useLocation, useNavigate } from 'react-router-dom';
@@ -17,8 +17,8 @@ import { create } from 'zustand';
 
 import { logoutAdmin } from './api/client';
 
-const { Header, Content, Sider } = Layout;
-const { Text, Title } = Typography;
+const { Content, Sider } = Layout;
+const { Text } = Typography;
 
 interface AdminUiState {
   collapsed: boolean;
@@ -88,9 +88,6 @@ export function App() {
   const queryClient = useQueryClient();
   const [messageApi, contextHolder] = message.useMessage();
   const [loggingOut, setLoggingOut] = useState(false);
-  const {
-    token: { colorBgContainer },
-  } = theme.useToken();
 
   const currentRoute = routeItems.find((item) => location.pathname.startsWith(item.key)) ?? routeItems[0];
 
@@ -110,7 +107,7 @@ export function App() {
   return (
     <Layout className="admin-shell">
       {contextHolder}
-      <Sider collapsible collapsed={collapsed} onCollapse={setCollapsed} width={224}>
+      <Sider collapsible collapsed={collapsed} onCollapse={setCollapsed} width={200}>
         <div className="brand">
           <span className="brand-mark">
             <MessageOutlined />
@@ -123,21 +120,18 @@ export function App() {
           )}
         </div>
         <Menu theme="dark" mode="inline" selectedKeys={[currentRoute.key]} items={menuItems} />
-      </Sider>
-      <Layout>
-        <Header className="admin-header" style={{ background: colorBgContainer }}>
-          <div>
-            <Title level={3}>{currentRoute.title}</Title>
-          </div>
-          <Space className="admin-session-control">
-            <Text type="secondary">
+        <div className="admin-sidebar-footer">
+          {!collapsed && (
+            <Text className="admin-sidebar-status">
               <UserOutlined /> Admin signed in
             </Text>
-            <Button icon={<LogoutOutlined />} loading={loggingOut} onClick={handleLogout}>
-              Log out
-            </Button>
-          </Space>
-        </Header>
+          )}
+          <Button block={!collapsed} icon={<LogoutOutlined />} loading={loggingOut} onClick={handleLogout}>
+            {!collapsed && 'Log out'}
+          </Button>
+        </div>
+      </Sider>
+      <Layout>
         <Content className="admin-content">
           <Outlet />
         </Content>

@@ -19,7 +19,7 @@ import type { ColumnsType } from 'antd/es/table';
 
 import { adminApi, providerTypes, type ProviderConfig, type ProviderConfigRequest } from '../api/admin';
 import { formatDate, renderEmpty } from './pageUtils';
-import { EnabledControl, ErrorAlert, PageSectionHeader } from './shared';
+import { ADMIN_TABLE_SCROLL_Y, EnabledControl, ErrorAlert, PageSectionHeader } from './shared';
 
 export function ProvidersPage() {
   const { message, modal } = AntApp.useApp();
@@ -138,19 +138,20 @@ export function ProvidersPage() {
         <PageSectionHeader
           title="Provider Management"
           actions={
-          <Button type="primary" icon={<PlusOutlined />} onClick={openCreate}>
-            New Provider
-          </Button>
+            <Button type="primary" icon={<PlusOutlined />} onClick={openCreate}>
+              New Provider
+            </Button>
           }
         />
         <Table
-          size="middle"
+          size="small"
           rowKey="id"
           loading={providersQuery.isLoading}
           dataSource={providersQuery.data ?? []}
           columns={columns}
           locale={{ emptyText: renderEmpty('No providers configured') }}
-          scroll={{ x: 1040 }}
+          pagination={{ size: 'small' }}
+          scroll={{ x: 1040, y: ADMIN_TABLE_SCROLL_Y }}
         />
       </Card>
       <Drawer

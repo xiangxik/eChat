@@ -4,7 +4,7 @@ import { Button, Card, Descriptions, Space, Table, Tag, Typography } from 'antd'
 import type { ColumnsType } from 'antd/es/table';
 
 import { adminApi, type AuditLog } from '../api/admin';
-import { ErrorAlert, PageSectionHeader } from './shared';
+import { ADMIN_TABLE_SCROLL_Y, ErrorAlert, PageSectionHeader } from './shared';
 import { formatDate, renderEmpty, stringifyJson } from './pageUtils';
 
 const { Paragraph, Text } = Typography;
@@ -70,13 +70,14 @@ export function AuditLogsPage() {
           }
         />
         <Table
-          size="middle"
+          size="small"
           rowKey="id"
           columns={columns}
           dataSource={auditLogs}
           loading={auditLogsQuery.isLoading}
           locale={{ emptyText: renderEmpty('No audit logs yet') }}
-          pagination={{ pageSize: 20 }}
+          pagination={{ pageSize: 20, size: 'small' }}
+          scroll={{ x: 960, y: ADMIN_TABLE_SCROLL_Y }}
           expandable={{
             expandedRowRender: (record) => (
               <Descriptions bordered size="small" column={1}>
