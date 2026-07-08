@@ -8,6 +8,10 @@ import jakarta.persistence.FetchType;
 import jakarta.persistence.JoinColumn;
 import jakarta.persistence.ManyToOne;
 import jakarta.persistence.Table;
+import java.util.LinkedHashMap;
+import java.util.Map;
+import org.hibernate.annotations.JdbcTypeCode;
+import org.hibernate.type.SqlTypes;
 
 @Entity
 @Table(name = "conversations")
@@ -29,6 +33,14 @@ public class Conversation extends AuditableEntity {
     @Enumerated(EnumType.STRING)
     @Column(name = "status", nullable = false, length = 32)
     private ConversationStatus status = ConversationStatus.ACTIVE;
+
+    @ManyToOne(fetch = FetchType.LAZY)
+    @JoinColumn(name = "current_workflow_node_id")
+    private ChatbotWorkflowNode currentWorkflowNode;
+
+    @JdbcTypeCode(SqlTypes.JSON)
+    @Column(name = "workflow_state", nullable = false, columnDefinition = "jsonb")
+    private Map<String, Object> workflowState = new LinkedHashMap<>();
 
     public ChatbotConfig getChatbot() {
         return chatbot;
@@ -68,5 +80,21 @@ public class Conversation extends AuditableEntity {
 
     public void setStatus(ConversationStatus status) {
         this.status = status;
+    }
+
+    public ChatbotWorkflowNode getCurrentWorkflowNode() {
+        return currentWorkflowNode;
+    }
+
+    public void setCurrentWorkflowNode(ChatbotWorkflowNode currentWorkflowNode) {
+        this.currentWorkflowNode = currentWorkflowNode;
+    }
+
+    public Map<String, Object> getWorkflowState() {
+        return workflowState;
+    }
+
+    public void setWorkflowState(Map<String, Object> workflowState) {
+        this.workflowState = workflowState == null ? new LinkedHashMap<>() : new LinkedHashMap<>(workflowState);
     }
 }

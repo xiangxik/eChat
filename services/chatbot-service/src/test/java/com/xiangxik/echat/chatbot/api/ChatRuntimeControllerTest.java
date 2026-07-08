@@ -2,17 +2,22 @@ package com.xiangxik.echat.chatbot.api;
 
 import com.xiangxik.echat.chatbot.PostgresIntegrationTest;
 import com.xiangxik.echat.chatbot.domain.model.ChatbotConfig;
+import com.xiangxik.echat.chatbot.domain.model.ChatbotWorkflowNode;
+import com.xiangxik.echat.chatbot.domain.model.ChatbotWorkflowTransition;
 import com.xiangxik.echat.chatbot.domain.model.ContextPolicy;
 import com.xiangxik.echat.chatbot.domain.model.ModelConfig;
 import com.xiangxik.echat.chatbot.domain.model.ModelType;
 import com.xiangxik.echat.chatbot.domain.model.ProviderConfig;
 import com.xiangxik.echat.chatbot.domain.model.ProviderType;
 import com.xiangxik.echat.chatbot.domain.repository.ChatbotConfigRepository;
+import com.xiangxik.echat.chatbot.domain.repository.ChatbotWorkflowNodeRepository;
+import com.xiangxik.echat.chatbot.domain.repository.ChatbotWorkflowTransitionRepository;
 import com.xiangxik.echat.chatbot.domain.repository.ContextPolicyRepository;
 import com.xiangxik.echat.chatbot.domain.repository.MessageRepository;
 import com.xiangxik.echat.chatbot.domain.repository.ModelConfigRepository;
 import com.xiangxik.echat.chatbot.domain.repository.ProviderConfigRepository;
 import com.xiangxik.echat.chatbot.service.ApiKeyProtector;
+import com.xiangxik.echat.chatbot.service.ContextPolicyService;
 import com.xiangxik.echat.chatbot.service.llm.LlmChatRequest;
 import com.xiangxik.echat.chatbot.service.llm.LlmChatResponse;
 import com.xiangxik.echat.chatbot.service.llm.LlmProviderClient;
@@ -68,6 +73,12 @@ class ChatRuntimeControllerTest extends PostgresIntegrationTest {
 
     @Autowired
     private ChatbotConfigRepository chatbotConfigRepository;
+
+    @Autowired
+    private ChatbotWorkflowNodeRepository workflowNodeRepository;
+
+    @Autowired
+    private ChatbotWorkflowTransitionRepository workflowTransitionRepository;
 
     @Autowired
     private MessageRepository messageRepository;
@@ -192,6 +203,15 @@ class ChatRuntimeControllerTest extends PostgresIntegrationTest {
         chatbot.setEnabled(true);
         chatbot = chatbotConfigRepository.saveAndFlush(chatbot);
 
+        ContextPolicy policy = new ContextPolicy();
+        policy.setName("Runtime no model policy " + UUID.randomUUID());
+        policy.setDslContent(runtimePolicyDsl());
+        policy.setVersion(1);
+        policy.setEnabled(true);
+        policy = contextPolicyRepository.saveAndFlush(policy);
+
+        createStartNode(chatbot, policy);
+
         Long conversationId = createConversation(chatbot.getId());
 
         mockMvc.perform(post("/api/chat/conversations/{id}/messages", conversationId)
@@ -205,6 +225,124 @@ class ChatRuntimeControllerTest extends PostgresIntegrationTest {
                 .andExpect(status().isConflict())
                 .andExpect(jsonPath("$.code").value("MODEL_NOT_CONFIGURED"));
     }
+
+            @Test
+            void defaultStartPolicyReturnsWelcomeWithoutModel() throws Exception {
+            ChatbotConfig chatbot = new ChatbotConfig();
+            chatbot.setName("Runtime default start " + UUID.randomUUID());
+            chatbot.setEnabled(true);
+            chatbot = chatbotConfigRepository.saveAndFlush(chatbot);
+
+            ContextPolicy defaultPolicy = contextPolicyRepository.findByName(ContextPolicyService.DEFAULT_CONTEXT_POLICY_NAME)
+                .orElseThrow();
+            createNode(chatbot, defaultPolicy, "Start", "Start", true);
+
+            Long conversationId = createConversation(chatbot.getId());
+
+            mockMvc.perform(post("/api/chat/conversations/{id}/messages", conversationId)
+                    .contentType(MediaType.APPLICATION_JSON)
+                    .content("""
+                        {
+                          "message":"Hello",
+                          "metadata":{}
+                        }
+                        """))
+                .andExpect(status().isOk())
+                .andExpect(jsonPath("$.conversation.currentWorkflowNodeKey").value("Start"))
+                .andExpect(jsonPath("$.assistantMessage.content").value("Welcome! How can I help you today?"));
+            }
+
+            @Test
+            void transitionsConversationNodeWhenRuleMatchesAfterAssistantMessage() throws Exception {
+            Long chatbotId = createConfiguredChatbot();
+            Long conversationId = createConversation(chatbotId);
+
+            mockMvc.perform(post("/api/chat/conversations/{id}/messages", conversationId)
+                    .contentType(MediaType.APPLICATION_JSON)
+                    .content("""
+                        {
+                          "message":"I need billing help",
+                          "metadata":{}
+                        }
+                        """))
+                .andExpect(status().isOk())
+                .andExpect(jsonPath("$.conversation.currentWorkflowNodeKey").value("billing"));
+
+            mockMvc.perform(get("/api/chat/conversations/{id}", conversationId))
+                .andExpect(status().isOk())
+                .andExpect(jsonPath("$.currentWorkflowNodeKey").value("billing"));
+            }
+
+            @Test
+            void returnsClearErrorWhenNextWorkflowNodeProviderApiKeyCannotBeRead() throws Exception {
+            String suffix = UUID.randomUUID().toString();
+            ProviderConfig provider = new ProviderConfig();
+            provider.setName("Runtime broken key provider " + suffix);
+            provider.setType(ProviderType.OPENAI_COMPATIBLE);
+            provider.setBaseUrl("http://localhost:8081/v1");
+            provider.setEncryptedApiKey("v1:");
+            provider.setEnabled(true);
+            provider = providerConfigRepository.saveAndFlush(provider);
+
+            ModelConfig model = new ModelConfig();
+            model.setProvider(provider);
+            model.setDisplayName("Runtime broken key model " + suffix);
+            model.setModelName("gpt-runtime");
+            model.setModelType(ModelType.CHAT);
+            model.setSupportsStreaming(true);
+            model.setEnabled(true);
+            model = modelConfigRepository.saveAndFlush(model);
+
+            ContextPolicy nextPolicy = new ContextPolicy();
+            nextPolicy.setName("Runtime broken key policy " + suffix);
+            nextPolicy.setDslContent(runtimePolicyDsl());
+            nextPolicy.setVersion(1);
+            nextPolicy.setModel(model);
+            nextPolicy.setEnabled(true);
+            nextPolicy = contextPolicyRepository.saveAndFlush(nextPolicy);
+
+            ChatbotConfig chatbot = new ChatbotConfig();
+            chatbot.setName("Runtime broken key bot " + suffix);
+            chatbot.setEnabled(true);
+            chatbot = chatbotConfigRepository.saveAndFlush(chatbot);
+
+            ContextPolicy defaultPolicy = contextPolicyRepository.findByName(ContextPolicyService.DEFAULT_CONTEXT_POLICY_NAME)
+                .orElseThrow();
+            ChatbotWorkflowNode startNode = createNode(chatbot, defaultPolicy, "Start", "Start", true);
+            ChatbotWorkflowNode nextNode = createNode(chatbot, nextPolicy, "FAQ", "FAQ", false);
+            ChatbotWorkflowTransition transition = new ChatbotWorkflowTransition();
+            transition.setChatbot(chatbot);
+            transition.setName("Always route");
+            transition.setFromNode(startNode);
+            transition.setToNode(nextNode);
+            transition.setPriority(0);
+            transition.setEnabled(true);
+            transition.setConditionExpression("true");
+            workflowTransitionRepository.saveAndFlush(transition);
+
+            Long conversationId = createConversation(chatbot.getId());
+            mockMvc.perform(post("/api/chat/conversations/{id}/messages", conversationId)
+                    .contentType(MediaType.APPLICATION_JSON)
+                    .content("""
+                        {
+                          "message":"first turn",
+                          "metadata":{}
+                        }
+                        """))
+                .andExpect(status().isOk())
+                .andExpect(jsonPath("$.conversation.currentWorkflowNodeKey").value("FAQ"));
+
+            mockMvc.perform(post("/api/chat/conversations/{id}/messages", conversationId)
+                    .contentType(MediaType.APPLICATION_JSON)
+                    .content("""
+                        {
+                          "message":"second turn",
+                          "metadata":{}
+                        }
+                        """))
+                .andExpect(status().isConflict())
+                .andExpect(jsonPath("$.code").value("PROVIDER_API_KEY_UNREADABLE"));
+            }
 
     private Long createConfiguredChatbot() {
         String suffix = UUID.randomUUID().toString();
@@ -238,9 +376,36 @@ class ChatRuntimeControllerTest extends PostgresIntegrationTest {
 
         ChatbotConfig chatbot = new ChatbotConfig();
         chatbot.setName("Runtime bot " + suffix);
-                chatbot.setContextPolicy(policy);
         chatbot.setEnabled(true);
-        return chatbotConfigRepository.saveAndFlush(chatbot).getId();
+        chatbot = chatbotConfigRepository.saveAndFlush(chatbot);
+        ChatbotWorkflowNode startNode = createNode(chatbot, policy, "start", "Start", true);
+        ChatbotWorkflowNode billingNode = createNode(chatbot, policy, "billing", "Billing", false);
+        ChatbotWorkflowTransition transition = new ChatbotWorkflowTransition();
+        transition.setChatbot(chatbot);
+        transition.setName("Route to billing");
+        transition.setFromNode(startNode);
+        transition.setToNode(billingNode);
+        transition.setPriority(0);
+        transition.setEnabled(true);
+        transition.setConditionExpression("user.message contains 'billing'");
+        workflowTransitionRepository.saveAndFlush(transition);
+        return chatbot.getId();
+    }
+
+    private void createStartNode(ChatbotConfig chatbot, ContextPolicy policy) {
+        createNode(chatbot, policy, "start", "Start", true);
+    }
+
+    private ChatbotWorkflowNode createNode(ChatbotConfig chatbot, ContextPolicy policy, String nodeKey, String name,
+                                           boolean start) {
+        ChatbotWorkflowNode node = new ChatbotWorkflowNode();
+        node.setChatbot(chatbot);
+        node.setNodeKey(nodeKey);
+        node.setName(name);
+        node.setContextPolicy(policy);
+        node.setStart(start);
+        node.setEnabled(true);
+        return workflowNodeRepository.saveAndFlush(node);
     }
 
         private String runtimePolicyDsl() {

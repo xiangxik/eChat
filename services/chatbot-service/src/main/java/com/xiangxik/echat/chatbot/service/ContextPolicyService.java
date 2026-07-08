@@ -19,6 +19,8 @@ import org.springframework.transaction.annotation.Transactional;
 @Service
 public class ContextPolicyService {
 
+    public static final String DEFAULT_CONTEXT_POLICY_NAME = "Default Context Policy";
+
     private final ContextPolicyRepository contextPolicyRepository;
     private final ModelConfigRepository modelConfigRepository;
     private final ContextPolicyValidator contextPolicyValidator;
@@ -50,6 +52,9 @@ public class ContextPolicyService {
     @Transactional
     public ContextPolicyResponse create(ContextPolicyRequest request) {
         contextPolicyValidator.validateAndParse(request.dslContent());
+        if (request.modelId() == null) {
+            throw new IllegalArgumentException("Context policy model is required");
+        }
         ContextPolicy contextPolicy = new ContextPolicy();
         apply(contextPolicy, request);
         ContextPolicy saved = contextPolicyRepository.save(contextPolicy);
@@ -61,6 +66,15 @@ public class ContextPolicyService {
     public ContextPolicyResponse update(Long id, ContextPolicyRequest request) {
         contextPolicyValidator.validateAndParse(request.dslContent());
         ContextPolicy contextPolicy = find(id);
+        if (contextPolicy.isSystemManaged() && !contextPolicy.getName().equals(request.name())) {
+            throw new IllegalArgumentException("System managed context policy name cannot be changed");
+        }
+        if (contextPolicy.isSystemManaged() && Boolean.FALSE.equals(request.enabled())) {
+            throw new IllegalArgumentException("System managed context policies cannot be disabled");
+        }
+        if (!contextPolicy.isSystemManaged() && request.modelId() == null) {
+            throw new IllegalArgumentException("Context policy model is required");
+        }
         apply(contextPolicy, request);
         ContextPolicy saved = contextPolicyRepository.save(contextPolicy);
         auditLogService.recordAdmin("CONTEXT_POLICY_UPDATED", "ContextPolicy", saved.getId(), auditMetadata(saved));
@@ -84,6 +98,9 @@ public class ContextPolicyService {
     @Transactional
     public void delete(Long id) {
         ContextPolicy contextPolicy = find(id);
+        if (contextPolicy.isSystemManaged()) {
+            throw new IllegalArgumentException("System managed context policies cannot be deleted");
+        }
         contextPolicyRepository.delete(contextPolicy);
         auditLogService.recordAdmin("CONTEXT_POLICY_DELETED", "ContextPolicy", id, auditMetadata(contextPolicy));
     }
@@ -100,8 +117,8 @@ public class ContextPolicyService {
         if (request.version() != null) {
             contextPolicy.setVersion(request.version());
         }
-        contextPolicy.setModel(modelConfigRepository.findById(request.modelId())
-                .orElseThrow(() -> new ResourceNotFoundException("ModelConfig", request.modelId())));
+        contextPolicy.setModel(request.modelId() == null ? null : modelConfigRepository.findById(request.modelId())
+            .orElseThrow(() -> new ResourceNotFoundException("ModelConfig", request.modelId())));
         if (request.enabled() != null) {
             contextPolicy.setEnabled(request.enabled());
         }
@@ -117,6 +134,7 @@ public class ContextPolicyService {
                 contextPolicy.getVersion(),
                 modelId,
                 contextPolicy.isEnabled(),
+            contextPolicy.isSystemManaged(),
                 contextPolicy.getCreatedAt(),
                 contextPolicy.getUpdatedAt()
         );

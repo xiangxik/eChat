@@ -82,7 +82,6 @@ export interface ChatbotConfig {
   id: number;
   name: string;
   description?: string;
-  contextPolicyId?: number;
   enabled: boolean;
   createdAt?: string;
   updatedAt?: string;
@@ -91,8 +90,104 @@ export interface ChatbotConfig {
 export interface ChatbotConfigRequest {
   name: string;
   description?: string;
-  contextPolicyId?: number;
   enabled?: boolean;
+}
+
+export interface ChatbotWorkflowNode {
+  id?: number;
+  nodeKey: string;
+  name: string;
+  description?: string;
+  contextPolicyId: number;
+  enabled: boolean;
+  start: boolean;
+  metadata?: Record<string, unknown>;
+  createdAt?: string;
+  updatedAt?: string;
+}
+
+export interface ChatbotWorkflowTransition {
+  id?: number;
+  name: string;
+  fromNodeKey: string;
+  toNodeKey: string;
+  priority: number;
+  enabled: boolean;
+  conditionExpression: string;
+  metadata?: Record<string, unknown>;
+  createdAt?: string;
+  updatedAt?: string;
+}
+
+export interface ChatbotWorkflow {
+  chatbotId: number;
+  nodes: ChatbotWorkflowNode[];
+  transitions: ChatbotWorkflowTransition[];
+}
+
+export interface ChatbotWorkflowRequest {
+  nodes: ChatbotWorkflowNode[];
+  transitions: ChatbotWorkflowTransition[];
+}
+
+export interface ChatbotWorkflowValidationResult {
+  valid: boolean;
+  errors: string[];
+  warnings: string[];
+}
+
+export interface ChatConversation {
+  id: number;
+  chatbotId: number;
+  title?: string | null;
+  status: string;
+  currentWorkflowNodeId?: number | null;
+  currentWorkflowNodeKey?: string | null;
+  createdAt?: string;
+  updatedAt?: string;
+}
+
+export interface ChatMessage {
+  id: number;
+  conversationId: number;
+  role: 'USER' | 'ASSISTANT' | string;
+  content: string;
+  tokenCount?: number | null;
+  metadata?: Record<string, unknown>;
+  createdAt?: string;
+}
+
+export interface ChatConversationCreateRequest {
+  chatbotId: number;
+  message?: string;
+  userId?: string;
+  anonymousSessionId?: string;
+  title?: string;
+  metadata?: Record<string, unknown>;
+}
+
+export interface ChatConversationCreateResponse extends ChatConversation {
+  requestId: string;
+  traceId: string;
+  userMessage: ChatMessage | null;
+  assistantMessage: ChatMessage | null;
+  tokenBudgetReport?: Record<string, unknown> | null;
+  contextWarnings: string[];
+}
+
+export interface ChatMessageRequest {
+  message: string;
+  metadata?: Record<string, unknown>;
+}
+
+export interface ChatRuntimeResponse {
+  requestId: string;
+  traceId: string;
+  conversation: ChatConversation;
+  userMessage: ChatMessage;
+  assistantMessage: ChatMessage;
+  tokenBudgetReport?: Record<string, unknown> | null;
+  contextWarnings: string[];
 }
 
 export interface ContextPolicy {
@@ -101,8 +196,9 @@ export interface ContextPolicy {
   description?: string;
   dslContent: string;
   version: number;
-  modelId: number;
+  modelId: number | null;
   enabled: boolean;
+  systemManaged?: boolean;
   createdAt?: string;
   updatedAt?: string;
 }
@@ -112,7 +208,7 @@ export interface ContextPolicyRequest {
   description?: string;
   dslContent: string;
   version?: number;
-  modelId: number;
+  modelId: number | null;
   enabled?: boolean;
 }
 
@@ -358,11 +454,24 @@ export const adminApi = {
     apiRequest<ModelGenerationTestResult>(`/api/admin/models/${id}/test-generation`, { method: 'POST' }),
 
   listChatbots: () => apiRequest<ChatbotConfig[]>('/api/admin/chatbots'),
+  getChatbot: (id: number) => apiRequest<ChatbotConfig>(`/api/admin/chatbots/${id}`),
   createChatbot: (request: ChatbotConfigRequest) =>
     apiRequest<ChatbotConfig>('/api/admin/chatbots', { method: 'POST', body: jsonBody(request) }),
   updateChatbot: (id: number, request: ChatbotConfigRequest) =>
     apiRequest<ChatbotConfig>(`/api/admin/chatbots/${id}`, { method: 'PUT', body: jsonBody(request) }),
   deleteChatbot: (id: number) => apiRequest<void>(`/api/admin/chatbots/${id}`, { method: 'DELETE' }),
+  getChatbotWorkflow: (chatbotId: number) => apiRequest<ChatbotWorkflow>(`/api/admin/chatbots/${chatbotId}/workflow`),
+  saveChatbotWorkflow: (chatbotId: number, request: ChatbotWorkflowRequest) =>
+    apiRequest<ChatbotWorkflow>(`/api/admin/chatbots/${chatbotId}/workflow`, { method: 'PUT', body: jsonBody(request) }),
+  validateChatbotWorkflow: (chatbotId: number, request: ChatbotWorkflowRequest) =>
+    apiRequest<ChatbotWorkflowValidationResult>(`/api/admin/chatbots/${chatbotId}/workflow/validate`, {
+      method: 'POST',
+      body: jsonBody(request),
+    }),
+  createChatConversation: (request: ChatConversationCreateRequest) =>
+    apiRequest<ChatConversationCreateResponse>('/api/chat/conversations', { method: 'POST', body: jsonBody(request) }),
+  sendChatMessage: (conversationId: number, request: ChatMessageRequest) =>
+    apiRequest<ChatRuntimeResponse>(`/api/chat/conversations/${conversationId}/messages`, { method: 'POST', body: jsonBody(request) }),
 
   listContextPolicies: () => apiRequest<ContextPolicy[]>('/api/admin/context-policies'),
   createContextPolicy: (request: ContextPolicyRequest) =>

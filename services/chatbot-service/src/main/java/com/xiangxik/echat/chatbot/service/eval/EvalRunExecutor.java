@@ -3,6 +3,7 @@ package com.xiangxik.echat.chatbot.service.eval;
 import com.fasterxml.jackson.core.type.TypeReference;
 import com.fasterxml.jackson.databind.ObjectMapper;
 import com.xiangxik.echat.chatbot.domain.model.ChatbotConfig;
+import com.xiangxik.echat.chatbot.domain.model.ChatbotWorkflowNode;
 import com.xiangxik.echat.chatbot.domain.model.ContextPolicy;
 import com.xiangxik.echat.chatbot.domain.model.EvalCase;
 import com.xiangxik.echat.chatbot.domain.model.EvalResult;
@@ -10,6 +11,7 @@ import com.xiangxik.echat.chatbot.domain.model.EvalRun;
 import com.xiangxik.echat.chatbot.domain.model.EvalRunStatus;
 import com.xiangxik.echat.chatbot.domain.model.ModelConfig;
 import com.xiangxik.echat.chatbot.domain.model.ProviderConfig;
+import com.xiangxik.echat.chatbot.domain.repository.ChatbotWorkflowNodeRepository;
 import com.xiangxik.echat.chatbot.domain.repository.EvalCaseRepository;
 import com.xiangxik.echat.chatbot.domain.repository.EvalResultRepository;
 import com.xiangxik.echat.chatbot.domain.repository.EvalRunRepository;
@@ -49,6 +51,7 @@ public class EvalRunExecutor {
     private final EvalRunRepository evalRunRepository;
     private final EvalCaseRepository evalCaseRepository;
     private final EvalResultRepository evalResultRepository;
+    private final ChatbotWorkflowNodeRepository workflowNodeRepository;
     private final ContextPolicyValidator contextPolicyValidator;
     private final ContextEngine contextEngine;
     private final LlmProviderClientRegistry clientRegistry;
@@ -60,6 +63,7 @@ public class EvalRunExecutor {
     public EvalRunExecutor(EvalRunRepository evalRunRepository,
                            EvalCaseRepository evalCaseRepository,
                            EvalResultRepository evalResultRepository,
+                           ChatbotWorkflowNodeRepository workflowNodeRepository,
                            ContextPolicyValidator contextPolicyValidator,
                            ContextEngine contextEngine,
                            LlmProviderClientRegistry clientRegistry,
@@ -70,6 +74,7 @@ public class EvalRunExecutor {
         this.evalRunRepository = evalRunRepository;
         this.evalCaseRepository = evalCaseRepository;
         this.evalResultRepository = evalResultRepository;
+        this.workflowNodeRepository = workflowNodeRepository;
         this.contextPolicyValidator = contextPolicyValidator;
         this.contextEngine = contextEngine;
         this.clientRegistry = clientRegistry;
@@ -181,7 +186,7 @@ public class EvalRunExecutor {
 
     private RunConfiguration configuration(EvalRun run) {
         ChatbotConfig chatbot = run.getChatbot();
-        ContextPolicy contextPolicy = run.getContextPolicy() == null ? chatbot.getContextPolicy() : run.getContextPolicy();
+        ContextPolicy contextPolicy = run.getContextPolicy() == null ? defaultWorkflowPolicy(chatbot) : run.getContextPolicy();
         if (contextPolicy == null || !contextPolicy.isEnabled()) {
             throw new IllegalStateException("Eval run has no enabled context policy");
         }
@@ -204,6 +209,12 @@ public class EvalRunExecutor {
         return new RunConfiguration(policy, model, provider, apiKeyProtector.decrypt(provider.getEncryptedApiKey()),
                 client, maxEstimatedTokens, maxLatencyMillis, maxEstimatedCostUsd, costPer1kTokensUsd,
                 forbiddenPhrases, rubric, booleanValue(run.getSummary().get("goldenReplay"), true));
+    }
+
+    private ContextPolicy defaultWorkflowPolicy(ChatbotConfig chatbot) {
+        ChatbotWorkflowNode startNode = workflowNodeRepository.findByChatbotIdAndStartTrueAndEnabledTrue(chatbot.getId())
+                .orElseThrow(() -> new IllegalStateException("Eval run chatbot has no enabled workflow start node"));
+        return startNode.getContextPolicy();
     }
 
     private Map<String, Object> contextSnapshot(ContextAssemblyResult contextResult, EvalCase evalCase,

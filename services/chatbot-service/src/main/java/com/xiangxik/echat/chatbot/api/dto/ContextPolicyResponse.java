@@ -12,6 +12,7 @@ public record ContextPolicyResponse(
         int version,
         Long modelId,
         boolean enabled,
+        boolean systemManaged,
         Instant createdAt,
         Instant updatedAt
 ) {

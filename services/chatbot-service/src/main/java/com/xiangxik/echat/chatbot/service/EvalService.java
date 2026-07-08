@@ -8,6 +8,7 @@ import com.xiangxik.echat.chatbot.api.dto.EvalResultResponse;
 import com.xiangxik.echat.chatbot.api.dto.EvalRunRequest;
 import com.xiangxik.echat.chatbot.api.dto.EvalRunResponse;
 import com.xiangxik.echat.chatbot.domain.model.ChatbotConfig;
+import com.xiangxik.echat.chatbot.domain.model.ChatbotWorkflowNode;
 import com.xiangxik.echat.chatbot.domain.model.ContextPolicy;
 import com.xiangxik.echat.chatbot.domain.model.EvalCase;
 import com.xiangxik.echat.chatbot.domain.model.EvalDataset;
@@ -16,6 +17,7 @@ import com.xiangxik.echat.chatbot.domain.model.EvalRun;
 import com.xiangxik.echat.chatbot.domain.model.EvalRunStatus;
 import com.xiangxik.echat.chatbot.domain.model.ModelConfig;
 import com.xiangxik.echat.chatbot.domain.repository.ChatbotConfigRepository;
+import com.xiangxik.echat.chatbot.domain.repository.ChatbotWorkflowNodeRepository;
 import com.xiangxik.echat.chatbot.domain.repository.ContextPolicyRepository;
 import com.xiangxik.echat.chatbot.domain.repository.EvalCaseRepository;
 import com.xiangxik.echat.chatbot.domain.repository.EvalDatasetRepository;
@@ -39,6 +41,7 @@ public class EvalService {
     private final EvalRunRepository evalRunRepository;
     private final EvalResultRepository evalResultRepository;
     private final ChatbotConfigRepository chatbotConfigRepository;
+    private final ChatbotWorkflowNodeRepository workflowNodeRepository;
     private final ModelConfigRepository modelConfigRepository;
     private final ContextPolicyRepository contextPolicyRepository;
     private final EvalRunExecutor evalRunExecutor;
@@ -48,6 +51,7 @@ public class EvalService {
                        EvalRunRepository evalRunRepository,
                        EvalResultRepository evalResultRepository,
                        ChatbotConfigRepository chatbotConfigRepository,
+                       ChatbotWorkflowNodeRepository workflowNodeRepository,
                        ModelConfigRepository modelConfigRepository,
                        ContextPolicyRepository contextPolicyRepository,
                        EvalRunExecutor evalRunExecutor) {
@@ -56,6 +60,7 @@ public class EvalService {
         this.evalRunRepository = evalRunRepository;
         this.evalResultRepository = evalResultRepository;
         this.chatbotConfigRepository = chatbotConfigRepository;
+        this.workflowNodeRepository = workflowNodeRepository;
         this.modelConfigRepository = modelConfigRepository;
         this.contextPolicyRepository = contextPolicyRepository;
         this.evalRunExecutor = evalRunExecutor;
@@ -100,8 +105,8 @@ public class EvalService {
         EvalDataset dataset = requireDataset(request.datasetId());
         ChatbotConfig chatbot = request.chatbotId() == null ? dataset.getChatbot() : chatbotConfigRepository.findById(request.chatbotId())
             .orElseThrow(() -> new ResourceNotFoundException("Chatbot", request.chatbotId()));
-        ContextPolicy contextPolicy = request.contextPolicyId() == null ? chatbot.getContextPolicy() : contextPolicyRepository.findById(request.contextPolicyId())
-            .orElseThrow(() -> new ResourceNotFoundException("Context policy", request.contextPolicyId()));
+        ContextPolicy contextPolicy = request.contextPolicyId() == null ? defaultWorkflowPolicy(chatbot) : contextPolicyRepository.findById(request.contextPolicyId())
+                .orElseThrow(() -> new ResourceNotFoundException("Context policy", request.contextPolicyId()));
         ModelConfig model = request.modelId() == null ? contextPolicy == null ? null : contextPolicy.getModel() : modelConfigRepository.findById(request.modelId())
             .orElseThrow(() -> new ResourceNotFoundException("Model", request.modelId()));
 
@@ -121,6 +126,12 @@ public class EvalService {
             }
         });
         return toRunResponse(run);
+    }
+
+    private ContextPolicy defaultWorkflowPolicy(ChatbotConfig chatbot) {
+        ChatbotWorkflowNode startNode = workflowNodeRepository.findByChatbotIdAndStartTrueAndEnabledTrue(chatbot.getId())
+                .orElseThrow(() -> new IllegalArgumentException("Chatbot workflow start node is not configured"));
+        return startNode.getContextPolicy();
     }
 
     @Transactional(readOnly = true)

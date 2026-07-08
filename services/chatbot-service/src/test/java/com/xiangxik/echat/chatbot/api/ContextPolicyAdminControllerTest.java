@@ -8,7 +8,9 @@ import com.xiangxik.echat.chatbot.domain.model.ProviderConfig;
 import com.xiangxik.echat.chatbot.domain.model.ProviderType;
 import com.xiangxik.echat.chatbot.domain.repository.ModelConfigRepository;
 import com.xiangxik.echat.chatbot.domain.repository.ProviderConfigRepository;
+import com.xiangxik.echat.chatbot.domain.repository.ContextPolicyRepository;
 import com.xiangxik.echat.chatbot.service.ApiKeyProtector;
+import com.xiangxik.echat.chatbot.service.ContextPolicyService;
 import java.util.LinkedHashMap;
 import java.util.List;
 import java.util.Map;
@@ -25,7 +27,10 @@ import org.springframework.transaction.annotation.Transactional;
 import org.springframework.web.context.WebApplicationContext;
 
 import static org.hamcrest.Matchers.containsString;
+import static org.springframework.test.web.servlet.request.MockMvcRequestBuilders.delete;
+import static org.springframework.test.web.servlet.request.MockMvcRequestBuilders.get;
 import static org.springframework.test.web.servlet.request.MockMvcRequestBuilders.post;
+import static org.springframework.test.web.servlet.request.MockMvcRequestBuilders.put;
 import static org.springframework.test.web.servlet.result.MockMvcResultMatchers.content;
 import static org.springframework.test.web.servlet.result.MockMvcResultMatchers.jsonPath;
 import static org.springframework.test.web.servlet.result.MockMvcResultMatchers.status;
@@ -48,6 +53,9 @@ class ContextPolicyAdminControllerTest extends PostgresIntegrationTest {
 
         @Autowired
         private ModelConfigRepository modelConfigRepository;
+
+        @Autowired
+        private ContextPolicyRepository contextPolicyRepository;
 
         @Autowired
         private ApiKeyProtector apiKeyProtector;
@@ -119,6 +127,52 @@ class ContextPolicyAdminControllerTest extends PostgresIntegrationTest {
                 .andExpect(status().isBadRequest())
                 .andExpect(jsonPath("$.code").value("CONTEXT_DSL_INVALID"))
                 .andExpect(content().string(containsString("Unsupported variable")));
+    }
+
+    @Test
+    void exposesAndProtectsSystemManagedDefaultContextPolicy() throws Exception {
+        Long defaultPolicyId = contextPolicyRepository.findByName(ContextPolicyService.DEFAULT_CONTEXT_POLICY_NAME)
+                .orElseThrow()
+                .getId();
+        Long modelId = createModel();
+
+        mockMvc.perform(get("/api/admin/context-policies/{id}", defaultPolicyId)
+                        .header("X-Admin-Token", ADMIN_TOKEN))
+                .andExpect(status().isOk())
+                .andExpect(jsonPath("$.name").value(ContextPolicyService.DEFAULT_CONTEXT_POLICY_NAME))
+                .andExpect(jsonPath("$.systemManaged").value(true));
+
+        mockMvc.perform(put("/api/admin/context-policies/{id}", defaultPolicyId)
+                        .header("X-Admin-Token", ADMIN_TOKEN)
+                        .contentType(MediaType.APPLICATION_JSON)
+                        .content(json(Map.of(
+                                "name", ContextPolicyService.DEFAULT_CONTEXT_POLICY_NAME,
+                                "description", "Editable welcome policy",
+                                "dslContent", sampleDsl(),
+                                "modelId", modelId,
+                                "enabled", true
+                        ))))
+                .andExpect(status().isOk())
+                .andExpect(jsonPath("$.name").value(ContextPolicyService.DEFAULT_CONTEXT_POLICY_NAME))
+                .andExpect(jsonPath("$.description").value("Editable welcome policy"))
+                .andExpect(jsonPath("$.systemManaged").value(true));
+
+        mockMvc.perform(put("/api/admin/context-policies/{id}", defaultPolicyId)
+                        .header("X-Admin-Token", ADMIN_TOKEN)
+                        .contentType(MediaType.APPLICATION_JSON)
+                        .content(json(Map.of(
+                                "name", "Changed Default Policy",
+                                "dslContent", sampleDsl(),
+                                "modelId", modelId,
+                                "enabled", true
+                        ))))
+                .andExpect(status().isBadRequest())
+                .andExpect(content().string(containsString("System managed context policy name cannot be changed")));
+
+        mockMvc.perform(delete("/api/admin/context-policies/{id}", defaultPolicyId)
+                        .header("X-Admin-Token", ADMIN_TOKEN))
+                .andExpect(status().isBadRequest())
+                .andExpect(content().string(containsString("System managed context policies cannot be deleted")));
     }
 
         private Long createModel() {

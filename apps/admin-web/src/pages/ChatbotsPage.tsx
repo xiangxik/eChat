@@ -1,7 +1,8 @@
 import { PlusOutlined } from '@ant-design/icons';
 import { useMutation, useQuery, useQueryClient } from '@tanstack/react-query';
-import { App as AntApp, Button, Card, Drawer, Form, Input, Popconfirm, Select, Space, Switch, Table } from 'antd';
+import { App as AntApp, Button, Card, Drawer, Form, Input, Popconfirm, Space, Switch, Table } from 'antd';
 import { useState } from 'react';
+import { useNavigate } from 'react-router-dom';
 import type { ColumnsType } from 'antd/es/table';
 
 import { adminApi, type ChatbotConfig, type ChatbotConfigRequest } from '../api/admin';
@@ -10,13 +11,13 @@ import { ADMIN_TABLE_SCROLL_Y, EnabledControl, ErrorAlert, PageSectionHeader } f
 
 export function ChatbotsPage() {
   const { message } = AntApp.useApp();
+  const navigate = useNavigate();
   const queryClient = useQueryClient();
   const [form] = Form.useForm<ChatbotConfigRequest>();
   const [editingChatbot, setEditingChatbot] = useState<ChatbotConfig>();
   const [drawerOpen, setDrawerOpen] = useState(false);
 
   const chatbotsQuery = useQuery({ queryKey: ['chatbots'], queryFn: adminApi.listChatbots });
-  const policiesQuery = useQuery({ queryKey: ['context-policies'], queryFn: adminApi.listContextPolicies });
   const invalidateChatbots = () => queryClient.invalidateQueries({ queryKey: ['chatbots'] });
 
   const saveMutation = useMutation({
@@ -46,12 +47,10 @@ export function ChatbotsPage() {
     onError: (error) => message.error(error instanceof Error ? error.message : 'Update failed'),
   });
 
-  const policyNameById = new Map((policiesQuery.data ?? []).map((policy) => [policy.id, policy.name]));
-
   const openCreate = () => {
     setEditingChatbot(undefined);
     form.resetFields();
-    form.setFieldsValue({ enabled: true, contextPolicyId: undefined });
+    form.setFieldsValue({ enabled: true });
     setDrawerOpen(true);
   };
 
@@ -66,12 +65,6 @@ export function ChatbotsPage() {
     { title: 'Name', dataIndex: 'name', width: 220 },
     { title: 'Description', dataIndex: 'description', ellipsis: true, render: (value?: string) => value || '-' },
     {
-      title: 'Context Policy',
-      dataIndex: 'contextPolicyId',
-      width: 220,
-      render: (id?: number) => (id ? policyNameById.get(id) ?? `#${id}` : '-'),
-    },
-    {
       title: 'Status',
       dataIndex: 'enabled',
       width: 170,
@@ -82,10 +75,13 @@ export function ChatbotsPage() {
     { title: 'Updated', dataIndex: 'updatedAt', width: 190, render: formatDate },
     {
       title: 'Actions',
-      width: 180,
+      width: 250,
       fixed: 'right',
       render: (_, chatbot) => (
         <Space>
+          <Button size="small" onClick={() => navigate(`/chatbots/${chatbot.id}/workflow`)}>
+            Workflow
+          </Button>
           <Button size="small" onClick={() => openEdit(chatbot)}>
             Edit
           </Button>
@@ -101,7 +97,7 @@ export function ChatbotsPage() {
 
   return (
     <div className="page-stack">
-      <ErrorAlert error={chatbotsQuery.error ?? policiesQuery.error} />
+      <ErrorAlert error={chatbotsQuery.error} />
       <Card className="admin-data-card">
         <PageSectionHeader
           title="Chatbot Management"
@@ -114,12 +110,12 @@ export function ChatbotsPage() {
         <Table
           size="small"
           rowKey="id"
-          loading={chatbotsQuery.isLoading || policiesQuery.isLoading}
+          loading={chatbotsQuery.isLoading}
           dataSource={chatbotsQuery.data ?? []}
           columns={columns}
           locale={{ emptyText: renderEmpty('No chatbots configured') }}
           pagination={{ size: 'small' }}
-          scroll={{ x: 960, y: ADMIN_TABLE_SCROLL_Y }}
+          scroll={{ x: 860, y: ADMIN_TABLE_SCROLL_Y }}
         />
       </Card>
       <Drawer
@@ -141,14 +137,6 @@ export function ChatbotsPage() {
           <Form.Item name="description" label="Description">
             <Input.TextArea rows={3} />
           </Form.Item>
-          <Form.Item name="contextPolicyId" label="Context Policy">
-            <Select
-              allowClear
-              showSearch
-              optionFilterProp="label"
-              options={(policiesQuery.data ?? []).map((policy) => ({ label: `${policy.name} v${policy.version}`, value: policy.id }))}
-            />
-          </Form.Item>
           <Form.Item name="enabled" label="Enabled" valuePropName="checked">
             <Switch />
           </Form.Item>
@@ -162,7 +150,6 @@ function normalizeChatbot(values: ChatbotConfigRequest): ChatbotConfigRequest {
   return {
     name: values.name,
     description: values.description || undefined,
-    contextPolicyId: values.contextPolicyId,
     enabled: values.enabled,
   };
 }

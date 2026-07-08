@@ -162,7 +162,7 @@ export function ContextPoliciesPage() {
     setValidationResult(undefined);
     setPreviewResult(undefined);
     form.resetFields();
-    form.setFieldsValue({ ...policy, previewJson: stringifyJson(defaultPreviewRequest) });
+    form.setFieldsValue({ ...policy, modelId: policy.modelId ?? undefined, previewJson: stringifyJson(defaultPreviewRequest) });
     setDrawerOpen(true);
   };
 
@@ -198,7 +198,7 @@ export function ContextPoliciesPage() {
       dataIndex: 'enabled',
       width: 170,
       render: (enabled: boolean, policy) => (
-        <EnabledControl enabled={enabled} loading={updateMutation.isPending} onChange={(checked) => updateMutation.mutate({ policy, enabled: checked })} />
+        policy.systemManaged ? <Tag color="green">System</Tag> : <EnabledControl enabled={enabled} loading={updateMutation.isPending} onChange={(checked) => updateMutation.mutate({ policy, enabled: checked })} />
       ),
     },
     { title: 'Updated', dataIndex: 'updatedAt', width: 190, render: formatDate },
@@ -211,8 +211,8 @@ export function ContextPoliciesPage() {
           <Button size="small" onClick={() => openEdit(policy)}>
             Edit
           </Button>
-          <Popconfirm title="Delete this context policy?" onConfirm={() => deleteMutation.mutate(policy.id)}>
-            <Button size="small" danger>
+          <Popconfirm title="Delete this context policy?" onConfirm={() => deleteMutation.mutate(policy.id)} disabled={policy.systemManaged}>
+            <Button size="small" danger disabled={policy.systemManaged}>
               Delete
             </Button>
           </Popconfirm>
@@ -275,15 +275,16 @@ export function ContextPoliciesPage() {
                   <div className="policy-editor-grid">
                     <div className="policy-editor-main">
                       <Form.Item name="name" label="Policy Name" rules={[{ required: true, max: 160 }]}>
-                        <Input placeholder="Support Bot Context" />
+                        <Input placeholder="Support Bot Context" disabled={editingPolicy?.systemManaged} />
                       </Form.Item>
                       <Form.Item name="description" label="Description">
                         <Input.TextArea rows={2} />
                       </Form.Item>
-                      <Form.Item name="modelId" label="Model" rules={[{ required: true }]}>
+                      <Form.Item name="modelId" label="Model" rules={editingPolicy?.systemManaged ? [] : [{ required: true }]}>
                         <Select
                           showSearch
                           optionFilterProp="label"
+                          disabled={editingPolicy?.systemManaged}
                           options={enabledModels.map((model) => ({ label: `${model.displayName} (${model.modelName})`, value: model.id }))}
                         />
                       </Form.Item>
@@ -292,7 +293,7 @@ export function ContextPoliciesPage() {
                           <InputNumber min={1} precision={0} className="full-width-control" />
                         </Form.Item>
                         <Form.Item name="enabled" label="Enabled" valuePropName="checked">
-                          <Switch />
+                          <Switch disabled={editingPolicy?.systemManaged} />
                         </Form.Item>
                       </Space>
                       <Form.Item name="dslContent" label="DSL Content" rules={[{ required: true }]}>
@@ -330,6 +331,9 @@ interface ContextPolicyFormValues extends ContextPolicyRequest {
 }
 
 function policyToRequest(policy: ContextPolicy): ContextPolicyRequest {
+  if (policy.modelId === null) {
+    throw new Error('Context policy model is not configured');
+  }
   return {
     name: policy.name,
     description: policy.description,

@@ -25,6 +25,8 @@ public abstract class PostgresIntegrationTest {
 						messages,
 						conversations,
 						memory_items,
+						chatbot_workflow_transitions,
+						chatbot_workflow_nodes,
 						chatbot_configs,
 						context_policies,
 						model_configs,

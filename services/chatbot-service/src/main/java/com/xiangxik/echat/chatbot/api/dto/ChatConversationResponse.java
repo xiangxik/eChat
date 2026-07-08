@@ -7,6 +7,9 @@ public record ChatConversationResponse(
         Long chatbotId,
         String title,
         String status,
+        Long currentWorkflowNodeId,
+        String currentWorkflowNodeKey,
+        String currentWorkflowNodeName,
         Instant createdAt,
         Instant updatedAt
 ) {

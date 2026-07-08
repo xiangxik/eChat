@@ -4,12 +4,14 @@ import com.fasterxml.jackson.databind.JsonNode;
 import com.fasterxml.jackson.databind.ObjectMapper;
 import com.xiangxik.echat.chatbot.PostgresIntegrationTest;
 import com.xiangxik.echat.chatbot.domain.model.ChatbotConfig;
+import com.xiangxik.echat.chatbot.domain.model.ChatbotWorkflowNode;
 import com.xiangxik.echat.chatbot.domain.model.ContextPolicy;
 import com.xiangxik.echat.chatbot.domain.model.ModelConfig;
 import com.xiangxik.echat.chatbot.domain.model.ModelType;
 import com.xiangxik.echat.chatbot.domain.model.ProviderConfig;
 import com.xiangxik.echat.chatbot.domain.model.ProviderType;
 import com.xiangxik.echat.chatbot.domain.repository.ChatbotConfigRepository;
+import com.xiangxik.echat.chatbot.domain.repository.ChatbotWorkflowNodeRepository;
 import com.xiangxik.echat.chatbot.domain.repository.ContextPolicyRepository;
 import com.xiangxik.echat.chatbot.domain.repository.ConversationRepository;
 import com.xiangxik.echat.chatbot.domain.repository.ModelConfigRepository;
@@ -68,6 +70,9 @@ class EvalAdminControllerTest extends PostgresIntegrationTest {
 
     @Autowired
     private ChatbotConfigRepository chatbotConfigRepository;
+
+    @Autowired
+    private ChatbotWorkflowNodeRepository workflowNodeRepository;
 
     @Autowired
     private ConversationRepository conversationRepository;
@@ -230,9 +235,18 @@ class EvalAdminControllerTest extends PostgresIntegrationTest {
 
         ChatbotConfig chatbot = new ChatbotConfig();
         chatbot.setName("Eval bot " + suffix);
-        chatbot.setContextPolicy(policy);
         chatbot.setEnabled(true);
-        return chatbotConfigRepository.saveAndFlush(chatbot).getId();
+        chatbot = chatbotConfigRepository.saveAndFlush(chatbot);
+
+        ChatbotWorkflowNode node = new ChatbotWorkflowNode();
+        node.setChatbot(chatbot);
+        node.setNodeKey("start");
+        node.setName("Start");
+        node.setContextPolicy(policy);
+        node.setStart(true);
+        node.setEnabled(true);
+        workflowNodeRepository.saveAndFlush(node);
+        return chatbot.getId();
     }
 
     private String evalPolicyDsl() {

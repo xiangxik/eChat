@@ -30,6 +30,9 @@ public class ContextPolicy extends AuditableEntity {
     @Column(name = "enabled", nullable = false)
     private boolean enabled = true;
 
+    @Column(name = "system_managed", nullable = false)
+    private boolean systemManaged;
+
     public String getName() {
         return name;
     }
@@ -76,5 +79,13 @@ public class ContextPolicy extends AuditableEntity {
 
     public void setEnabled(boolean enabled) {
         this.enabled = enabled;
+    }
+
+    public boolean isSystemManaged() {
+        return systemManaged;
+    }
+
+    public void setSystemManaged(boolean systemManaged) {
+        this.systemManaged = systemManaged;
     }
 }

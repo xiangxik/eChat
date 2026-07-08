@@ -2,6 +2,7 @@ package com.xiangxik.echat.chatbot.domain.repository;
 
 import com.xiangxik.echat.chatbot.PostgresIntegrationTest;
 import com.xiangxik.echat.chatbot.domain.model.ChatbotConfig;
+import com.xiangxik.echat.chatbot.domain.model.ChatbotWorkflowNode;
 import com.xiangxik.echat.chatbot.domain.model.ContextPolicy;
 import com.xiangxik.echat.chatbot.domain.model.Conversation;
 import com.xiangxik.echat.chatbot.domain.model.ConversationStatus;
@@ -40,6 +41,9 @@ class CoreDomainRepositoryTest extends PostgresIntegrationTest {
     @Autowired
     private ChatbotConfigRepository chatbotConfigRepository;
 
+        @Autowired
+        private ChatbotWorkflowNodeRepository workflowNodeRepository;
+
     @Autowired
     private ConversationRepository conversationRepository;
 
@@ -77,11 +81,20 @@ class CoreDomainRepositoryTest extends PostgresIntegrationTest {
 
         ChatbotConfig chatbot = new ChatbotConfig();
         chatbot.setName("Support Bot " + suffix);
-        chatbot.setContextPolicy(policy);
         chatbot = chatbotConfigRepository.save(chatbot);
+
+        ChatbotWorkflowNode node = new ChatbotWorkflowNode();
+        node.setChatbot(chatbot);
+        node.setNodeKey("start");
+        node.setName("Start");
+        node.setContextPolicy(policy);
+        node.setStart(true);
+        node.setEnabled(true);
+        workflowNodeRepository.save(node);
 
         Conversation conversation = new Conversation();
         conversation.setChatbot(chatbot);
+        conversation.setCurrentWorkflowNode(node);
         conversation.setUserId("user-1");
         conversation.setTitle("Billing question");
         conversation = conversationRepository.save(conversation);

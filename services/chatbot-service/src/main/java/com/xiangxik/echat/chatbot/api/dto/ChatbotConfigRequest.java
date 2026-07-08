@@ -8,7 +8,6 @@ import jakarta.validation.constraints.Size;
 public record ChatbotConfigRequest(
         @NotBlank @Size(max = 160) String name,
         String description,
-        Long contextPolicyId,
         Boolean enabled
 ) {
 }

@@ -10,6 +10,8 @@ import com.xiangxik.echat.chatbot.api.dto.ChatMessageResponse;
 import com.xiangxik.echat.chatbot.api.dto.ChatRuntimeResponse;
 import com.xiangxik.echat.chatbot.api.dto.ChatStreamEventResponse;
 import com.xiangxik.echat.chatbot.domain.model.ChatbotConfig;
+import com.xiangxik.echat.chatbot.domain.model.ChatbotWorkflowNode;
+import com.xiangxik.echat.chatbot.domain.model.ChatbotWorkflowTransition;
 import com.xiangxik.echat.chatbot.domain.model.ContextPolicy;
 import com.xiangxik.echat.chatbot.domain.model.Conversation;
 import com.xiangxik.echat.chatbot.domain.model.Message;
@@ -32,6 +34,11 @@ import com.xiangxik.echat.chatbot.service.llm.LlmChatResponse;
 import com.xiangxik.echat.chatbot.service.llm.LlmProviderClient;
 import com.xiangxik.echat.chatbot.service.llm.LlmProviderClientRegistry;
 import com.xiangxik.echat.chatbot.service.llm.LlmProviderException;
+import com.xiangxik.echat.chatbot.domain.repository.ChatbotWorkflowNodeRepository;
+import com.xiangxik.echat.chatbot.domain.repository.ChatbotWorkflowTransitionRepository;
+import com.xiangxik.echat.chatbot.domain.repository.ConversationRepository;
+import com.xiangxik.echat.chatbot.service.workflow.WorkflowTransitionEvaluationContext;
+import com.xiangxik.echat.chatbot.service.workflow.WorkflowTransitionEvaluator;
 import java.io.IOException;
 import java.time.Duration;
 import java.time.Instant;
@@ -56,6 +63,7 @@ public class ChatRuntimeService {
     private static final Logger log = LoggerFactory.getLogger(ChatRuntimeService.class);
     private static final int MAX_MESSAGE_LENGTH = 8000;
     private static final long SSE_TIMEOUT_MILLIS = 90_000L;
+    private static final String DEFAULT_WELCOME_MESSAGE = "Welcome! How can I help you today?";
     private static final List<String> PROMPT_INJECTION_PATTERNS = List.of(
             "ignore previous instructions",
             "disregard previous instructions",
@@ -80,6 +88,10 @@ public class ChatRuntimeService {
     private final TransactionTemplate transactionTemplate;
     private final AuditLogService auditLogService;
     private final MeterRegistry meterRegistry;
+    private final ConversationRepository conversationRepository;
+    private final ChatbotWorkflowNodeRepository workflowNodeRepository;
+    private final ChatbotWorkflowTransitionRepository workflowTransitionRepository;
+    private final WorkflowTransitionEvaluator workflowTransitionEvaluator;
 
     public ChatRuntimeService(ConversationService conversationService,
                               MessageService messageService,
@@ -95,7 +107,11 @@ public class ChatRuntimeService {
                               ChatCancellationRegistry cancellationRegistry,
                               TransactionTemplate transactionTemplate,
                               AuditLogService auditLogService,
-                              MeterRegistry meterRegistry) {
+                              MeterRegistry meterRegistry,
+                              ConversationRepository conversationRepository,
+                              ChatbotWorkflowNodeRepository workflowNodeRepository,
+                              ChatbotWorkflowTransitionRepository workflowTransitionRepository,
+                              WorkflowTransitionEvaluator workflowTransitionEvaluator) {
         this.conversationService = conversationService;
         this.messageService = messageService;
         this.contextPolicyValidator = contextPolicyValidator;
@@ -111,6 +127,10 @@ public class ChatRuntimeService {
         this.transactionTemplate = transactionTemplate;
         this.auditLogService = auditLogService;
         this.meterRegistry = meterRegistry;
+        this.conversationRepository = conversationRepository;
+        this.workflowNodeRepository = workflowNodeRepository;
+        this.workflowTransitionRepository = workflowTransitionRepository;
+        this.workflowTransitionEvaluator = workflowTransitionEvaluator;
     }
 
     public ChatConversationCreateResponse createConversation(ChatConversationCreateRequest request,
@@ -152,6 +172,15 @@ public class ChatRuntimeService {
     public ChatRuntimeResponse sendMessage(Long conversationId, ChatMessageRequest request,
                                            RuntimeRequestContext context) {
         PreparedInvocation invocation = prepareInvocation(conversationId, request, context);
+        if (invocation.systemReply()) {
+            Message assistantMessage = saveAssistantMessage(conversationId, invocation.systemReplyContent(), context,
+                invocation.contextResult(), "system_welcome", Map.of("systemManaged", true));
+            ChatConversationResponse conversationResponse = applyWorkflowTransition(invocation, conversationId, context,
+                assistantMessage);
+            return new ChatRuntimeResponse(context.requestId(), context.traceId(), conversationResponse,
+                toMessageResponse(invocation.userMessage()), toMessageResponse(assistantMessage),
+                invocation.contextResult().tokenBudgetReport(), invocation.contextResult().warnings());
+        }
         LlmProviderClient client = clientRegistry.getClient(invocation.provider().getType());
         Instant llmStartedAt = Instant.now();
         try {
@@ -159,6 +188,8 @@ public class ChatRuntimeService {
                     invocation.llmRequest());
             Message assistantMessage = saveAssistantMessage(conversationId, response.content(), context,
                     invocation.contextResult(), response.finishReason(), response.metadata());
+                ChatConversationResponse conversationResponse = applyWorkflowTransition(invocation, conversationId, context,
+                    assistantMessage);
             memoryExtractionService.afterTurn(invocation.conversationResponse().chatbotId(), conversationId,
                     invocation.userId(), invocation.userMessage(), assistantMessage);
             log.info("audit.chat.message.completed requestId={} traceId={} conversationId={} userMessageId={} assistantMessageId={} tokens={}",
@@ -170,7 +201,7 @@ public class ChatRuntimeService {
                     context.requestId(), context.traceId(), context.remoteAddress(),
                     Map.of("userMessageId", invocation.userMessage().getId(), "assistantMessageId", assistantMessage.getId(),
                             "estimatedTokens", assistantMessage.getTokenCount()));
-            return new ChatRuntimeResponse(context.requestId(), context.traceId(), invocation.conversationResponse(),
+                return new ChatRuntimeResponse(context.requestId(), context.traceId(), conversationResponse,
                     toMessageResponse(invocation.userMessage()), toMessageResponse(assistantMessage),
                     invocation.contextResult().tokenBudgetReport(), invocation.contextResult().warnings());
         } catch (LlmProviderException ex) {
@@ -197,6 +228,25 @@ public class ChatRuntimeService {
         StringBuilder assistantContent = new StringBuilder();
         try {
             PreparedInvocation invocation = prepareInvocation(conversationId, request, context);
+                if (invocation.systemReply()) {
+                Message assistantMessage = saveAssistantMessage(conversationId, invocation.systemReplyContent(), context,
+                    invocation.contextResult(), "system_welcome", Map.of("systemManaged", true, "stream", true));
+                ChatConversationResponse conversationResponse = applyWorkflowTransition(invocation, conversationId, context,
+                    assistantMessage);
+                sessionStateCache.recordStreamState(context.requestId(), "completed");
+                send(emitter, "message_start", new ChatStreamEventResponse("message_start", context.requestId(),
+                    context.traceId(), conversationId, null, null, null, null,
+                    invocation.contextResult().tokenBudgetReport(), Map.of("warnings", invocation.contextResult().warnings())));
+                send(emitter, "message_delta", new ChatStreamEventResponse("message_delta", context.requestId(),
+                    context.traceId(), conversationId, null, null, invocation.systemReplyContent(), null, null, Map.of()));
+                send(emitter, "message_end", new ChatStreamEventResponse("message_end", context.requestId(),
+                    context.traceId(), conversationId, assistantMessage.getId(), null, invocation.systemReplyContent(),
+                    toMessageResponse(assistantMessage), invocation.contextResult().tokenBudgetReport(),
+                    Map.of("currentWorkflowNodeId", conversationResponse.currentWorkflowNodeId(),
+                        "currentWorkflowNodeKey", conversationResponse.currentWorkflowNodeKey())));
+                emitter.complete();
+                return;
+                }
             LlmProviderClient client = clientRegistry.getClient(invocation.provider().getType());
             sessionStateCache.recordStreamState(context.requestId(), "streaming");
             send(emitter, "message_start", new ChatStreamEventResponse("message_start", context.requestId(),
@@ -219,12 +269,16 @@ public class ChatRuntimeService {
 
             Message assistantMessage = saveAssistantMessage(conversationId, assistantContent.toString(), context,
                     invocation.contextResult(), "stop", Map.of("stream", true));
+                ChatConversationResponse conversationResponse = applyWorkflowTransition(invocation, conversationId, context,
+                    assistantMessage);
             memoryExtractionService.afterTurn(invocation.conversationResponse().chatbotId(), conversationId,
                     invocation.userId(), invocation.userMessage(), assistantMessage);
             sessionStateCache.recordStreamState(context.requestId(), "completed");
             send(emitter, "message_end", new ChatStreamEventResponse("message_end", context.requestId(),
                     context.traceId(), conversationId, assistantMessage.getId(), null, assistantContent.toString(),
-                    toMessageResponse(assistantMessage), invocation.contextResult().tokenBudgetReport(), Map.of()));
+                    toMessageResponse(assistantMessage), invocation.contextResult().tokenBudgetReport(),
+                    Map.of("currentWorkflowNodeId", conversationResponse.currentWorkflowNodeId(),
+                        "currentWorkflowNodeKey", conversationResponse.currentWorkflowNodeKey())));
             log.info("audit.chat.stream.completed requestId={} traceId={} conversationId={} userMessageId={} assistantMessageId={} tokens={}",
                     context.requestId(), context.traceId(), conversationId, invocation.userMessage().getId(),
                     assistantMessage.getId(), assistantMessage.getTokenCount());
@@ -258,16 +312,25 @@ public class ChatRuntimeService {
             Conversation conversation = conversationService.get(conversationId);
             ChatbotConfig chatbot = conversation.getChatbot();
             validateChatbot(chatbot);
-            ContextPolicy contextPolicy = resolveContextPolicy(chatbot);
+            ChatbotWorkflowNode workflowNode = resolveWorkflowNode(conversation);
+            ContextPolicy contextPolicy = resolveContextPolicy(workflowNode);
+                Message userMessage = messageService.create(conversationId, MessageRole.USER, message,
+                    tokenEstimator.estimate(message), requestMetadata(metadata, context));
+                ContextAssemblyResult contextResult = assembleContext(conversation, workflowNode, contextPolicy, message,
+                    metadata, context);
+                if (isDefaultWelcomePolicy(contextPolicy)) {
+                log.info("audit.chat.message.received requestId={} traceId={} conversationId={} userMessageId={} contextTokens={}",
+                    context.requestId(), context.traceId(), conversationId, userMessage.getId(),
+                    contextResult.tokenBudgetReport().totalEstimatedTokens());
+                return new PreparedInvocation(toConversationResponse(conversation), conversation.getUserId(), userMessage,
+                    null, null, null, null, contextResult, workflowNode, metadata, true,
+                    systemReplyContent(contextPolicy));
+                }
             ModelConfig model = contextPolicy.getModel();
             validateModel(model);
             ProviderConfig provider = model.getProvider();
             validateProvider(provider);
-            String apiKey = apiKeyProtector.decrypt(provider.getEncryptedApiKey());
-
-            Message userMessage = messageService.create(conversationId, MessageRole.USER, message,
-                    tokenEstimator.estimate(message), requestMetadata(metadata, context));
-        ContextAssemblyResult contextResult = assembleContext(conversation, contextPolicy, message, metadata, context);
+            String apiKey = decryptProviderApiKey(provider);
             LlmChatRequest llmRequest = new LlmChatRequest(contextResult.messages().stream()
                     .map(contextMessage -> new LlmChatMessage(toProviderRole(contextMessage.role()),
                             contextMessage.content(), contextMessage.metadata()))
@@ -277,13 +340,13 @@ public class ChatRuntimeService {
                     contextResult.tokenBudgetReport().totalEstimatedTokens());
                 return new PreparedInvocation(toConversationResponse(conversation), conversation.getUserId(), userMessage,
                     provider, model, apiKey,
-                    llmRequest, contextResult);
+                    llmRequest, contextResult, workflowNode, metadata, false, null);
         });
     }
 
-    private ContextAssemblyResult assembleContext(Conversation conversation, ContextPolicy contextPolicy,
-                                                  String latestUserMessage, Map<String, Object> metadata,
-                                                  RuntimeRequestContext requestContext) {
+    private ContextAssemblyResult assembleContext(Conversation conversation, ChatbotWorkflowNode workflowNode,
+                                                  ContextPolicy contextPolicy, String latestUserMessage,
+                                                  Map<String, Object> metadata, RuntimeRequestContext requestContext) {
         List<Message> messages = messageService.listByConversation(conversation.getId());
         ContextPolicyDefinition policy = contextPolicyValidator.validateAndParse(contextPolicy.getDslContent());
         ContextMemoryBundle memoryBundle = contextMemoryResolver.resolve(policy, conversation.getChatbot().getId(),
@@ -293,19 +356,96 @@ public class ChatRuntimeService {
         runtime.put("traceId", requestContext.traceId());
         runtime.put("timestamp", Instant.now().toString());
         runtime.put("cancellationSupported", true);
+        runtime.put("workflowNodeId", workflowNode.getId());
+        runtime.put("workflowNodeKey", workflowNode.getNodeKey());
+        runtime.put("workflowNodeName", workflowNode.getName());
+        runtime.put("workflowState", conversation.getWorkflowState());
         return contextEngine.assemble(policy, new ContextAssemblyRequest(conversation.getChatbot().getId(),
                 conversation.getId(), conversation.getUserId(), latestUserMessage, metadata,
             messages.stream().map(this::toContextMessage).toList(), memoryBundle.shortTermMemory(),
             memoryBundle.longTermMemory(), Map.of(), memoryBundle.retrievalResults(), List.of(), runtime));
     }
 
-    private ContextPolicy resolveContextPolicy(ChatbotConfig chatbot) {
-        ContextPolicy contextPolicy = chatbot.getContextPolicy();
+    private ChatbotWorkflowNode resolveWorkflowNode(Conversation conversation) {
+        ChatbotWorkflowNode workflowNode = conversation.getCurrentWorkflowNode();
+        if (workflowNode == null) {
+            workflowNode = workflowNodeRepository.findByChatbotIdAndStartTrueAndEnabledTrue(conversation.getChatbot().getId())
+                    .orElseThrow(() -> new ChatRuntimeException("WORKFLOW_NOT_CONFIGURED",
+                            "Chatbot has no enabled workflow start node configured", HttpStatus.CONFLICT));
+            conversation.setCurrentWorkflowNode(workflowNode);
+            conversationRepository.save(conversation);
+        }
+        if (!workflowNode.getChatbot().getId().equals(conversation.getChatbot().getId())) {
+            throw new ChatRuntimeException("WORKFLOW_NODE_INVALID", "Conversation workflow node belongs to another chatbot",
+                    HttpStatus.CONFLICT);
+        }
+        if (!workflowNode.isEnabled()) {
+            throw new ChatRuntimeException("WORKFLOW_NODE_DISABLED", "Conversation workflow node is disabled",
+                    HttpStatus.CONFLICT);
+        }
+        return workflowNode;
+    }
+
+    private ContextPolicy resolveContextPolicy(ChatbotWorkflowNode workflowNode) {
+        ContextPolicy contextPolicy = workflowNode.getContextPolicy();
         if (contextPolicy == null || !contextPolicy.isEnabled()) {
-            throw new ChatRuntimeException("MODEL_NOT_CONFIGURED", "Chatbot has no enabled policy model configured",
+            throw new ChatRuntimeException("WORKFLOW_NODE_POLICY_NOT_CONFIGURED", "Workflow node has no enabled context policy configured",
                     HttpStatus.CONFLICT);
         }
         return contextPolicy;
+    }
+
+    private boolean isDefaultWelcomePolicy(ContextPolicy contextPolicy) {
+        return contextPolicy.isSystemManaged()
+                && ContextPolicyService.DEFAULT_CONTEXT_POLICY_NAME.equals(contextPolicy.getName());
+    }
+
+    private String systemReplyContent(ContextPolicy contextPolicy) {
+        return contextPolicyValidator.validateAndParse(contextPolicy.getDslContent()).systemBlocks().stream()
+                .sorted(java.util.Comparator.comparingInt(ContextPolicyDefinition.SystemBlock::priority).reversed())
+                .map(ContextPolicyDefinition.SystemBlock::content)
+                .map(content -> content.replaceFirst("(?is)^\\s*Reply\\s+with\\s+exactly:\\s*", "").strip())
+                .filter(StringUtils::hasText)
+                .findFirst()
+                .orElse(DEFAULT_WELCOME_MESSAGE);
+    }
+
+    private ChatConversationResponse applyWorkflowTransition(PreparedInvocation invocation, Long conversationId,
+                                                            RuntimeRequestContext context, Message assistantMessage) {
+        return transactionTemplate.execute(status -> {
+            Conversation conversation = conversationRepository.findById(conversationId)
+                    .orElseThrow(() -> new ResourceNotFoundException("Conversation", conversationId));
+            ChatbotWorkflowNode fromNode = resolveWorkflowNode(conversation);
+            List<ChatbotWorkflowTransition> transitions = workflowTransitionRepository
+                    .findByChatbotIdAndFromNodeIdAndEnabledTrueOrderByPriorityAscIdAsc(
+                            conversation.getChatbot().getId(), fromNode.getId());
+            WorkflowTransitionEvaluationContext evaluationContext = new WorkflowTransitionEvaluationContext(
+                    conversation.getChatbot().getId(), conversation.getId(), fromNode.getNodeKey(),
+                    invocation.userMessage().getContent(), assistantMessage.getContent(), invocation.requestMetadata(),
+                    conversation.getWorkflowState());
+            for (ChatbotWorkflowTransition transition : transitions) {
+                if (!transition.getToNode().isEnabled()) {
+                    continue;
+                }
+                try {
+                    if (workflowTransitionEvaluator.evaluate(transition.getConditionExpression(), evaluationContext)) {
+                        conversation.setCurrentWorkflowNode(transition.getToNode());
+                        Conversation saved = conversationRepository.save(conversation);
+                        auditLogService.recordRuntime("CHAT_WORKFLOW_TRANSITIONED", "Conversation", conversationId,
+                                context.requestId(), context.traceId(), context.remoteAddress(),
+                                Map.of("fromNodeKey", fromNode.getNodeKey(),
+                                        "toNodeKey", transition.getToNode().getNodeKey(),
+                                        "transitionId", transition.getId(),
+                                        "transitionName", transition.getName()));
+                        return toConversationResponse(saved);
+                    }
+                } catch (RuntimeException ex) {
+                    log.warn("workflow.transition.evaluate_failed requestId={} conversationId={} transitionId={} reason={}",
+                            context.requestId(), conversationId, transition.getId(), ex.getMessage());
+                }
+            }
+            return toConversationResponse(conversation);
+        });
     }
 
     private Message saveAssistantMessage(Long conversationId, String content, RuntimeRequestContext context,
@@ -348,6 +488,15 @@ public class ChatRuntimeService {
         }
         if (!provider.isEnabled()) {
             throw new ChatRuntimeException("PROVIDER_DISABLED", "Model provider is disabled", HttpStatus.CONFLICT);
+        }
+    }
+
+    private String decryptProviderApiKey(ProviderConfig provider) {
+        try {
+            return apiKeyProtector.decrypt(provider.getEncryptedApiKey());
+        } catch (RuntimeException ex) {
+            throw new ChatRuntimeException("PROVIDER_API_KEY_UNREADABLE",
+                    "Provider API key cannot be read. Re-save the provider API key.", HttpStatus.CONFLICT);
         }
     }
 
@@ -418,8 +567,11 @@ public class ChatRuntimeService {
     }
 
     private ChatConversationResponse toConversationResponse(Conversation conversation) {
+        ChatbotWorkflowNode workflowNode = conversation.getCurrentWorkflowNode();
         return new ChatConversationResponse(conversation.getId(), conversation.getChatbot().getId(), conversation.getTitle(),
-                conversation.getStatus().name(), conversation.getCreatedAt(), conversation.getUpdatedAt());
+            conversation.getStatus().name(), workflowNode == null ? null : workflowNode.getId(),
+            workflowNode == null ? null : workflowNode.getNodeKey(), workflowNode == null ? null : workflowNode.getName(),
+            conversation.getCreatedAt(), conversation.getUpdatedAt());
     }
 
     private ChatMessageResponse toMessageResponse(Message message) {
@@ -458,7 +610,11 @@ public class ChatRuntimeService {
             ModelConfig model,
             String apiKey,
             LlmChatRequest llmRequest,
-            ContextAssemblyResult contextResult
+            ContextAssemblyResult contextResult,
+            ChatbotWorkflowNode workflowNode,
+            Map<String, Object> requestMetadata,
+            boolean systemReply,
+            String systemReplyContent
     ) {
     }
 }

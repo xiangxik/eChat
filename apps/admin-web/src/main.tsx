@@ -10,6 +10,9 @@ const AdminShellRoute = lazy(() =>
   import('./AdminShellRoute').then((module) => ({ default: module.AdminShellRoute })),
 );
 const AuditLogsPage = lazy(() => import('./pages/AuditLogsPage').then((module) => ({ default: module.AuditLogsPage })));
+const ChatbotWorkflowPage = lazy(() =>
+  import('./pages/ChatbotWorkflowPage').then((module) => ({ default: module.ChatbotWorkflowPage })),
+);
 const ChatbotsPage = lazy(() => import('./pages/ChatbotsPage').then((module) => ({ default: module.ChatbotsPage })));
 const ContextPoliciesPage = lazy(() =>
   import('./pages/ContextPoliciesPage').then((module) => ({ default: module.ContextPoliciesPage })),
@@ -44,6 +47,7 @@ const router = createBrowserRouter([
       { path: 'providers', element: lazyPage(<ProvidersPage />) },
       { path: 'models', element: lazyPage(<ModelsPage />) },
       { path: 'chatbots', element: lazyPage(<ChatbotsPage />) },
+      { path: 'chatbots/:chatbotId/workflow', element: lazyPage(<ChatbotWorkflowPage />) },
       { path: 'context-policies', element: lazyPage(<ContextPoliciesPage />) },
       { path: 'evals', element: lazyPage(<EvalsPage />) },
       { path: 'identity', element: lazyPage(<IdentityPage />) },

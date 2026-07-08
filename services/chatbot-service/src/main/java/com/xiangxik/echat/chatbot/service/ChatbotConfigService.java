@@ -3,7 +3,10 @@ package com.xiangxik.echat.chatbot.service;
 import com.xiangxik.echat.chatbot.api.dto.ChatbotConfigRequest;
 import com.xiangxik.echat.chatbot.api.dto.ChatbotConfigResponse;
 import com.xiangxik.echat.chatbot.domain.model.ChatbotConfig;
+import com.xiangxik.echat.chatbot.domain.model.ChatbotWorkflowNode;
+import com.xiangxik.echat.chatbot.domain.model.ContextPolicy;
 import com.xiangxik.echat.chatbot.domain.repository.ChatbotConfigRepository;
+import com.xiangxik.echat.chatbot.domain.repository.ChatbotWorkflowNodeRepository;
 import com.xiangxik.echat.chatbot.domain.repository.ContextPolicyRepository;
 import java.util.List;
 import org.springframework.stereotype.Service;
@@ -13,13 +16,16 @@ import org.springframework.transaction.annotation.Transactional;
 public class ChatbotConfigService {
 
     private final ChatbotConfigRepository chatbotConfigRepository;
+    private final ChatbotWorkflowNodeRepository workflowNodeRepository;
     private final ContextPolicyRepository contextPolicyRepository;
     private final AuditLogService auditLogService;
 
     public ChatbotConfigService(ChatbotConfigRepository chatbotConfigRepository,
+                                ChatbotWorkflowNodeRepository workflowNodeRepository,
                                 ContextPolicyRepository contextPolicyRepository,
                                 AuditLogService auditLogService) {
         this.chatbotConfigRepository = chatbotConfigRepository;
+        this.workflowNodeRepository = workflowNodeRepository;
         this.contextPolicyRepository = contextPolicyRepository;
         this.auditLogService = auditLogService;
     }
@@ -39,6 +45,7 @@ public class ChatbotConfigService {
         ChatbotConfig chatbotConfig = new ChatbotConfig();
         apply(chatbotConfig, request);
         ChatbotConfig saved = chatbotConfigRepository.save(chatbotConfig);
+        ensureStartNode(saved);
         auditLogService.recordAdmin("CHATBOT_CREATED", "ChatbotConfig", saved.getId(), auditMetadata(saved));
         return toResponse(saved);
     }
@@ -67,20 +74,34 @@ public class ChatbotConfigService {
     private void apply(ChatbotConfig chatbotConfig, ChatbotConfigRequest request) {
         chatbotConfig.setName(request.name());
         chatbotConfig.setDescription(request.description());
-        chatbotConfig.setContextPolicy(request.contextPolicyId() == null ? null : contextPolicyRepository.findById(request.contextPolicyId())
-                .orElseThrow(() -> new ResourceNotFoundException("ContextPolicy", request.contextPolicyId())));
         if (request.enabled() != null) {
             chatbotConfig.setEnabled(request.enabled());
         }
     }
 
+    private void ensureStartNode(ChatbotConfig chatbotConfig) {
+        if (workflowNodeRepository.findByChatbotIdAndStartTrueAndEnabledTrue(chatbotConfig.getId()).isPresent()) {
+            return;
+        }
+        ContextPolicy defaultPolicy = contextPolicyRepository.findByName(ContextPolicyService.DEFAULT_CONTEXT_POLICY_NAME)
+                .orElseThrow(() -> new IllegalStateException("Default Context Policy is not configured"));
+        ChatbotWorkflowNode startNode = new ChatbotWorkflowNode();
+        startNode.setChatbot(chatbotConfig);
+        startNode.setNodeKey(ChatbotWorkflowService.START_NODE_KEY);
+        startNode.setName(ChatbotWorkflowService.START_NODE_KEY);
+        startNode.setDescription("Built-in workflow entry node");
+        startNode.setContextPolicy(defaultPolicy);
+        startNode.setEnabled(true);
+        startNode.setStart(true);
+        startNode.setMetadata(java.util.Map.of("x", 56, "y", 64));
+        workflowNodeRepository.save(startNode);
+    }
+
     private ChatbotConfigResponse toResponse(ChatbotConfig chatbotConfig) {
-        Long contextPolicyId = chatbotConfig.getContextPolicy() == null ? null : chatbotConfig.getContextPolicy().getId();
         return new ChatbotConfigResponse(
                 chatbotConfig.getId(),
                 chatbotConfig.getName(),
                 chatbotConfig.getDescription(),
-                contextPolicyId,
                 chatbotConfig.isEnabled(),
                 chatbotConfig.getCreatedAt(),
                 chatbotConfig.getUpdatedAt()
@@ -88,10 +109,8 @@ public class ChatbotConfigService {
     }
 
     private java.util.Map<String, Object> auditMetadata(ChatbotConfig chatbotConfig) {
-        Long contextPolicyId = chatbotConfig.getContextPolicy() == null ? null : chatbotConfig.getContextPolicy().getId();
         java.util.Map<String, Object> metadata = new java.util.LinkedHashMap<>();
         metadata.put("name", chatbotConfig.getName());
-        metadata.put("contextPolicyId", contextPolicyId);
         metadata.put("enabled", chatbotConfig.isEnabled());
         return metadata;
     }

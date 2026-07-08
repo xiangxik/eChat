@@ -2,7 +2,6 @@ package com.xiangxik.echat.chatbot.api.dto;
 
 import io.swagger.v3.oas.annotations.media.Schema;
 import jakarta.validation.constraints.NotBlank;
-import jakarta.validation.constraints.NotNull;
 import jakarta.validation.constraints.Positive;
 import jakarta.validation.constraints.Size;
 
@@ -12,7 +11,7 @@ public record ContextPolicyRequest(
         String description,
         @NotBlank String dslContent,
         @Positive Integer version,
-        @NotNull Long modelId,
+        Long modelId,
         Boolean enabled
 ) {
 }

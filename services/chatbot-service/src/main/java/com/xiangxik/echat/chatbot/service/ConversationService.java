@@ -4,8 +4,10 @@ import com.xiangxik.echat.chatbot.domain.model.ChatbotConfig;
 import com.xiangxik.echat.chatbot.domain.model.Conversation;
 import com.xiangxik.echat.chatbot.domain.model.ConversationStatus;
 import com.xiangxik.echat.chatbot.domain.repository.ChatbotConfigRepository;
+import com.xiangxik.echat.chatbot.domain.repository.ChatbotWorkflowNodeRepository;
 import com.xiangxik.echat.chatbot.domain.repository.ConversationRepository;
 import java.util.List;
+import org.springframework.http.HttpStatus;
 import org.springframework.stereotype.Service;
 import org.springframework.transaction.annotation.Transactional;
 
@@ -14,11 +16,14 @@ public class ConversationService {
 
     private final ConversationRepository conversationRepository;
     private final ChatbotConfigRepository chatbotConfigRepository;
+    private final ChatbotWorkflowNodeRepository workflowNodeRepository;
 
     public ConversationService(ConversationRepository conversationRepository,
-                               ChatbotConfigRepository chatbotConfigRepository) {
+                               ChatbotConfigRepository chatbotConfigRepository,
+                               ChatbotWorkflowNodeRepository workflowNodeRepository) {
         this.conversationRepository = conversationRepository;
         this.chatbotConfigRepository = chatbotConfigRepository;
+        this.workflowNodeRepository = workflowNodeRepository;
     }
 
     @Transactional(readOnly = true)
@@ -44,6 +49,9 @@ public class ConversationService {
         conversation.setAnonymousSessionId(anonymousSessionId);
         conversation.setTitle(title);
         conversation.setStatus(ConversationStatus.ACTIVE);
+        conversation.setCurrentWorkflowNode(workflowNodeRepository.findByChatbotIdAndStartTrueAndEnabledTrue(chatbotId)
+            .orElseThrow(() -> new ChatRuntimeException("WORKFLOW_NOT_CONFIGURED",
+                "Chatbot has no enabled workflow start node configured", HttpStatus.CONFLICT)));
         return conversationRepository.save(conversation);
     }
 
@@ -60,7 +68,7 @@ public class ConversationService {
     }
 
     private Conversation find(Long id) {
-        return conversationRepository.findById(id)
+        return conversationRepository.findByIdWithChatbotAndWorkflowNode(id)
                 .orElseThrow(() -> new ResourceNotFoundException("Conversation", id));
     }
 }
