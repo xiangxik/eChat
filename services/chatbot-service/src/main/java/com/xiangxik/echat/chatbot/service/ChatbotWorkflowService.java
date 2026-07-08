@@ -10,11 +10,13 @@ import com.xiangxik.echat.chatbot.api.dto.ChatbotWorkflowValidationResponse;
 import com.xiangxik.echat.chatbot.domain.model.ChatbotConfig;
 import com.xiangxik.echat.chatbot.domain.model.ChatbotWorkflowNode;
 import com.xiangxik.echat.chatbot.domain.model.ChatbotWorkflowTransition;
-import com.xiangxik.echat.chatbot.domain.model.ContextPolicy;
+import com.xiangxik.echat.chatbot.domain.model.ModelConfig;
 import com.xiangxik.echat.chatbot.domain.repository.ChatbotConfigRepository;
 import com.xiangxik.echat.chatbot.domain.repository.ChatbotWorkflowNodeRepository;
 import com.xiangxik.echat.chatbot.domain.repository.ChatbotWorkflowTransitionRepository;
-import com.xiangxik.echat.chatbot.domain.repository.ContextPolicyRepository;
+import com.xiangxik.echat.chatbot.domain.repository.ModelConfigRepository;
+import com.xiangxik.echat.chatbot.service.context.ContextPolicyValidationResult;
+import com.xiangxik.echat.chatbot.service.context.ContextPolicyValidator;
 import com.xiangxik.echat.chatbot.service.workflow.WorkflowTransitionEvaluator;
 import java.util.ArrayList;
 import java.util.HashMap;
@@ -32,24 +34,35 @@ import org.springframework.util.StringUtils;
 public class ChatbotWorkflowService {
 
     public static final String START_NODE_KEY = "Start";
+    public static final String DEFAULT_START_NODE_DSL = """
+            <contextPolicy name="default-welcome" maxTokens="512">
+                <system priority="100">Reply with exactly: Welcome! How can I help you today?</system>
+                <output>
+                    <section name="system" />
+                </output>
+            </contextPolicy>
+            """;
 
     private final ChatbotConfigRepository chatbotConfigRepository;
     private final ChatbotWorkflowNodeRepository nodeRepository;
     private final ChatbotWorkflowTransitionRepository transitionRepository;
-    private final ContextPolicyRepository contextPolicyRepository;
+    private final ModelConfigRepository modelConfigRepository;
+    private final ContextPolicyValidator contextPolicyValidator;
     private final WorkflowTransitionEvaluator transitionEvaluator;
     private final AuditLogService auditLogService;
 
     public ChatbotWorkflowService(ChatbotConfigRepository chatbotConfigRepository,
                                   ChatbotWorkflowNodeRepository nodeRepository,
                                   ChatbotWorkflowTransitionRepository transitionRepository,
-                                  ContextPolicyRepository contextPolicyRepository,
+                                  ModelConfigRepository modelConfigRepository,
+                                  ContextPolicyValidator contextPolicyValidator,
                                   WorkflowTransitionEvaluator transitionEvaluator,
                                   AuditLogService auditLogService) {
         this.chatbotConfigRepository = chatbotConfigRepository;
         this.nodeRepository = nodeRepository;
         this.transitionRepository = transitionRepository;
-        this.contextPolicyRepository = contextPolicyRepository;
+        this.modelConfigRepository = modelConfigRepository;
+        this.contextPolicyValidator = contextPolicyValidator;
         this.transitionEvaluator = transitionEvaluator;
         this.auditLogService = auditLogService;
     }
@@ -63,13 +76,13 @@ public class ChatbotWorkflowService {
     @Transactional(readOnly = true)
     public ChatbotWorkflowValidationResponse validate(Long chatbotId, ChatbotWorkflowRequest request) {
         findChatbot(chatbotId);
-        return validateRequest(withRequiredStartNode(request, defaultContextPolicy()));
+        return validateRequest(withRequiredStartNode(request));
     }
 
     @Transactional
     public ChatbotWorkflowResponse save(Long chatbotId, ChatbotWorkflowRequest request) {
         ChatbotConfig chatbot = findChatbot(chatbotId);
-        ChatbotWorkflowRequest normalizedRequest = withRequiredStartNode(request, defaultContextPolicy());
+        ChatbotWorkflowRequest normalizedRequest = withRequiredStartNode(request);
         ChatbotWorkflowValidationResponse validation = validateRequest(normalizedRequest);
         if (!validation.valid()) {
             throw new IllegalArgumentException("Invalid chatbot workflow: " + String.join("; ", validation.errors()));
@@ -82,12 +95,12 @@ public class ChatbotWorkflowService {
         List<ChatbotWorkflowTransition> existingTransitions = transitionRepository.findByChatbotIdOrderByFromNodeNodeKeyAscPriorityAscIdAsc(chatbotId);
         transitionRepository.deleteAll(existingTransitions);
 
-        Map<Long, ContextPolicy> policies = contextPolicyRepository.findAllById(normalizedRequest.nodes().stream()
-                .map(ChatbotWorkflowNodeRequest::contextPolicyId)
+        Map<Long, ModelConfig> models = modelConfigRepository.findAllById(normalizedRequest.nodes().stream()
+            .map(ChatbotWorkflowNodeRequest::modelId)
                 .filter(Objects::nonNull)
                 .collect(Collectors.toSet()))
                 .stream()
-                .collect(Collectors.toMap(ContextPolicy::getId, Function.identity()));
+            .collect(Collectors.toMap(ModelConfig::getId, Function.identity()));
 
         Map<String, ChatbotWorkflowNode> savedNodes = new LinkedHashMap<>();
         for (ChatbotWorkflowNodeRequest nodeRequest : normalizedRequest.nodes()) {
@@ -100,7 +113,9 @@ public class ChatbotWorkflowService {
             }
             node.setName(nodeRequest.name().strip());
             node.setDescription(blankToNull(nodeRequest.description()));
-            node.setContextPolicy(policies.get(nodeRequest.contextPolicyId()));
+            node.setDslContent(nodeRequest.dslContent().strip());
+            node.setVersion(nodeRequest.version() == null ? 1 : nodeRequest.version());
+            node.setModel(nodeRequest.modelId() == null ? null : models.get(nodeRequest.modelId()));
             node.setEnabled(nodeRequest.enabled() == null || nodeRequest.enabled());
             node.setStart(Boolean.TRUE.equals(nodeRequest.start()));
             node.setMetadata(copyMap(nodeRequest.metadata()));
@@ -150,12 +165,12 @@ public class ChatbotWorkflowService {
 
         Map<String, ChatbotWorkflowNodeRequest> nodesByKey = new LinkedHashMap<>();
         int enabledStartCount = 0;
-        Map<Long, ContextPolicy> policies = contextPolicyRepository.findAllById(nodes.stream()
-                .map(ChatbotWorkflowNodeRequest::contextPolicyId)
+        Map<Long, ModelConfig> models = modelConfigRepository.findAllById(nodes.stream()
+            .map(ChatbotWorkflowNodeRequest::modelId)
                 .filter(Objects::nonNull)
                 .collect(Collectors.toSet()))
                 .stream()
-                .collect(Collectors.toMap(ContextPolicy::getId, Function.identity()));
+            .collect(Collectors.toMap(ModelConfig::getId, Function.identity()));
         for (ChatbotWorkflowNodeRequest node : nodes) {
             String nodeKey = normalizeKey(node.nodeKey());
             if (!StringUtils.hasText(nodeKey)) {
@@ -173,20 +188,31 @@ public class ChatbotWorkflowService {
                 if (!Boolean.TRUE.equals(node.start())) {
                     errors.add("Start node must be the workflow start node");
                 }
-                ContextPolicy startPolicy = policies.get(node.contextPolicyId());
-                if (startPolicy == null || !startPolicy.isSystemManaged()
-                        || !ContextPolicyService.DEFAULT_CONTEXT_POLICY_NAME.equals(startPolicy.getName())) {
-                    errors.add("Start node must use Default Context Policy");
+                if (node.modelId() != null) {
+                    errors.add("Start node cannot use a model");
                 }
             }
             if (enabled && Boolean.TRUE.equals(node.start())) {
                 enabledStartCount++;
             }
-            ContextPolicy policy = policies.get(node.contextPolicyId());
-            if (policy == null) {
-                errors.add("Node " + nodeKey + " references missing context policy: " + node.contextPolicyId());
-            } else if (enabled && !policy.isEnabled()) {
-                errors.add("Node " + nodeKey + " references a disabled context policy: " + node.contextPolicyId());
+            if (!StringUtils.hasText(node.dslContent())) {
+                errors.add("Node " + nodeKey + " requires context DSL content");
+            } else {
+                ContextPolicyValidationResult policyValidation = contextPolicyValidator.validate(node.dslContent());
+                if (!policyValidation.valid()) {
+                    errors.add("Node " + nodeKey + " has invalid context DSL");
+                }
+            }
+            if (node.version() != null && node.version() <= 0) {
+                errors.add("Node " + nodeKey + " version must be greater than 0");
+            }
+            if (node.modelId() != null) {
+                ModelConfig model = models.get(node.modelId());
+                if (model == null) {
+                    errors.add("Node " + nodeKey + " references missing model: " + node.modelId());
+                } else if (enabled && !model.isEnabled()) {
+                    errors.add("Node " + nodeKey + " references a disabled model: " + node.modelId());
+                }
             }
         }
         if (enabledStartCount != 1) {
@@ -232,7 +258,7 @@ public class ChatbotWorkflowService {
                 .orElseThrow(() -> new ResourceNotFoundException("ChatbotConfig", chatbotId));
     }
 
-    private ChatbotWorkflowRequest withRequiredStartNode(ChatbotWorkflowRequest request, ContextPolicy defaultPolicy) {
+    private ChatbotWorkflowRequest withRequiredStartNode(ChatbotWorkflowRequest request) {
         List<ChatbotWorkflowNodeRequest> nodes = new ArrayList<>(request == null || request.nodes() == null ? List.of() : request.nodes());
         List<ChatbotWorkflowTransitionRequest> transitions = request == null || request.transitions() == null ? List.of() : request.transitions();
         int startIndex = -1;
@@ -244,11 +270,13 @@ public class ChatbotWorkflowService {
         }
         ChatbotWorkflowNodeRequest existingStart = startIndex >= 0 ? nodes.get(startIndex) : null;
         ChatbotWorkflowNodeRequest startNode = new ChatbotWorkflowNodeRequest(START_NODE_KEY,
-            existingStart == null ? START_NODE_KEY : existingStart.name(),
+                existingStart == null ? START_NODE_KEY : existingStart.name(),
                 existingStart == null ? "Built-in workflow entry node" : existingStart.description(),
-            existingStart == null ? defaultPolicy.getId() : existingStart.contextPolicyId(),
-            existingStart == null || existingStart.enabled() == null || existingStart.enabled(),
-            existingStart == null ? true : existingStart.start(),
+                existingStart == null ? DEFAULT_START_NODE_DSL : existingStart.dslContent(),
+                existingStart == null ? 1 : existingStart.version(),
+                null,
+                existingStart == null || existingStart.enabled() == null || existingStart.enabled(),
+                existingStart == null ? true : existingStart.start(),
                 existingStart == null ? Map.of("x", 56, "y", 64) : existingStart.metadata());
         if (startIndex >= 0) {
             nodes.set(startIndex, startNode);
@@ -256,11 +284,6 @@ public class ChatbotWorkflowService {
             nodes.add(0, startNode);
         }
         return new ChatbotWorkflowRequest(nodes, transitions);
-    }
-
-    private ContextPolicy defaultContextPolicy() {
-        return contextPolicyRepository.findByName(ContextPolicyService.DEFAULT_CONTEXT_POLICY_NAME)
-                .orElseThrow(() -> new IllegalStateException("Default Context Policy is not configured"));
     }
 
     private ChatbotWorkflowResponse toResponse(Long chatbotId) {
@@ -274,8 +297,9 @@ public class ChatbotWorkflowService {
     }
 
     private ChatbotWorkflowNodeResponse toNodeResponse(ChatbotWorkflowNode node) {
+        Long modelId = node.getModel() == null ? null : node.getModel().getId();
         return new ChatbotWorkflowNodeResponse(node.getId(), node.getNodeKey(), node.getName(), node.getDescription(),
-                node.getContextPolicy().getId(), node.isEnabled(), node.isStart(), node.getMetadata(),
+            node.getDslContent(), node.getVersion(), modelId, node.isEnabled(), node.isStart(), node.getMetadata(),
                 node.getCreatedAt(), node.getUpdatedAt());
     }
 

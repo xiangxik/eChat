@@ -15,12 +15,10 @@ export function DashboardPage() {
   const providersQuery = useQuery({ queryKey: ['providers'], queryFn: adminApi.listProviders });
   const modelsQuery = useQuery({ queryKey: ['models'], queryFn: adminApi.listModels });
   const chatbotsQuery = useQuery({ queryKey: ['chatbots'], queryFn: adminApi.listChatbots });
-  const policiesQuery = useQuery({ queryKey: ['context-policies'], queryFn: adminApi.listContextPolicies });
   const readinessRows = [
     { key: 'providers', item: 'LLM providers', count: providersQuery.data?.length ?? 0, description: 'Connection endpoints and credentials' },
     { key: 'models', item: 'Model configs', count: modelsQuery.data?.length ?? 0, description: 'Chat, embedding, and generation presets' },
     { key: 'chatbots', item: 'Chatbot configs', count: chatbotsQuery.data?.length ?? 0, description: 'Runtime assistants exposed to users' },
-    { key: 'policies', item: 'Context policies', count: policiesQuery.data?.length ?? 0, description: 'Context assembly and budget rules' },
   ];
   const configuredCount = readinessRows.filter((item) => item.count > 0).length;
   const readinessPercent = Math.round((configuredCount / readinessRows.length) * 100);

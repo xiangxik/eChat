@@ -5,6 +5,8 @@ spring:
     password: ${TEST_DB_PASSWORD:${DB_PASSWORD:change-me-local-postgres}}
   flyway:
     enabled: true
+    clean-disabled: false
+    validate-on-migrate: false
     create-schemas: true
     default-schema: ${TEST_DB_SCHEMA:echat_test}
     schemas: ${TEST_DB_SCHEMA:echat_test}

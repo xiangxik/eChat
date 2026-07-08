@@ -3,17 +3,15 @@ package com.xiangxik.echat.chatbot.api;
 import com.fasterxml.jackson.databind.ObjectMapper;
 import com.xiangxik.echat.chatbot.PostgresIntegrationTest;
 import com.xiangxik.echat.chatbot.domain.model.ChatbotConfig;
-import com.xiangxik.echat.chatbot.domain.model.ContextPolicy;
 import com.xiangxik.echat.chatbot.domain.model.ModelConfig;
 import com.xiangxik.echat.chatbot.domain.model.ModelType;
 import com.xiangxik.echat.chatbot.domain.model.ProviderConfig;
 import com.xiangxik.echat.chatbot.domain.model.ProviderType;
 import com.xiangxik.echat.chatbot.domain.repository.ChatbotConfigRepository;
-import com.xiangxik.echat.chatbot.domain.repository.ContextPolicyRepository;
 import com.xiangxik.echat.chatbot.domain.repository.ModelConfigRepository;
 import com.xiangxik.echat.chatbot.domain.repository.ProviderConfigRepository;
 import com.xiangxik.echat.chatbot.service.ApiKeyProtector;
-import com.xiangxik.echat.chatbot.service.ContextPolicyService;
+import com.xiangxik.echat.chatbot.service.ChatbotWorkflowService;
 import java.util.List;
 import java.util.Map;
 import java.util.UUID;
@@ -54,9 +52,6 @@ class ChatbotWorkflowAdminControllerTest extends PostgresIntegrationTest {
     private ModelConfigRepository modelConfigRepository;
 
     @Autowired
-    private ContextPolicyRepository contextPolicyRepository;
-
-    @Autowired
     private ChatbotConfigRepository chatbotConfigRepository;
 
     @Autowired
@@ -70,8 +65,8 @@ class ChatbotWorkflowAdminControllerTest extends PostgresIntegrationTest {
     @Test
     void validatesSavesAndReadsChatbotWorkflow() throws Exception {
         Long chatbotId = createChatbot();
-        Long policyId = createPolicy();
-        Map<String, Object> request = workflowRequest(policyId);
+        Long modelId = createModel();
+        Map<String, Object> request = workflowRequest(modelId);
 
         mockMvc.perform(post("/api/admin/chatbots/{chatbotId}/workflow/validate", chatbotId)
                         .header("X-Admin-Token", ADMIN_TOKEN)
@@ -87,6 +82,7 @@ class ChatbotWorkflowAdminControllerTest extends PostgresIntegrationTest {
                 .andExpect(status().isOk())
                 .andExpect(jsonPath("$.chatbotId").value(chatbotId))
                 .andExpect(jsonPath("$.nodes[?(@.nodeKey == 'Start' && @.name == 'Welcome Entry')]").exists())
+                .andExpect(jsonPath("$.nodes[?(@.nodeKey == 'billing' && @.modelId == %d)]".formatted(modelId)).exists())
                 .andExpect(jsonPath("$.transitions[0].conditionExpression").value("user.message contains 'billing'"));
 
         mockMvc.perform(get("/api/admin/chatbots/{chatbotId}/workflow", chatbotId)
@@ -103,7 +99,7 @@ class ChatbotWorkflowAdminControllerTest extends PostgresIntegrationTest {
         return chatbotConfigRepository.saveAndFlush(chatbot).getId();
     }
 
-    private Long createPolicy() {
+    private Long createModel() {
         String suffix = UUID.randomUUID().toString();
         ProviderConfig provider = new ProviderConfig();
         provider.setName("Workflow OpenAI " + suffix);
@@ -121,25 +117,16 @@ class ChatbotWorkflowAdminControllerTest extends PostgresIntegrationTest {
         model.setMaxContextTokens(8192);
         model.setSupportsStreaming(true);
         model.setEnabled(true);
-        model = modelConfigRepository.saveAndFlush(model);
-
-        ContextPolicy policy = new ContextPolicy();
-        policy.setName("Workflow policy " + suffix);
-        policy.setDslContent(sampleDsl());
-        policy.setVersion(1);
-        policy.setModel(model);
-        policy.setEnabled(true);
-        return contextPolicyRepository.saveAndFlush(policy).getId();
+        return modelConfigRepository.saveAndFlush(model).getId();
     }
 
-    private Map<String, Object> workflowRequest(Long policyId) {
-        Long defaultPolicyId = contextPolicyRepository.findByName(ContextPolicyService.DEFAULT_CONTEXT_POLICY_NAME)
-            .orElseThrow()
-            .getId();
+    private Map<String, Object> workflowRequest(Long modelId) {
         return Map.of(
                 "nodes", List.of(
-                Map.of("nodeKey", "Start", "name", "Welcome Entry", "contextPolicyId", defaultPolicyId, "enabled", true, "start", true),
-                        Map.of("nodeKey", "billing", "name", "Billing", "contextPolicyId", policyId, "enabled", true, "start", false)
+                Map.of("nodeKey", "Start", "name", "Welcome Entry", "dslContent", ChatbotWorkflowService.DEFAULT_START_NODE_DSL,
+                    "version", 1, "enabled", true, "start", true),
+                Map.of("nodeKey", "billing", "name", "Billing", "dslContent", sampleDsl(),
+                    "version", 1, "modelId", modelId, "enabled", true, "start", false)
                 ),
                 "transitions", List.of(
                 Map.of("name", "Route to billing", "fromNodeKey", "Start", "toNodeKey", "billing",

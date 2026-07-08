@@ -57,12 +57,6 @@ const routeItems = [
     title: 'Chatbot Management',
   },
   {
-    key: '/context-policies',
-    icon: <MessageOutlined />,
-    label: 'Context Policies',
-    title: 'Context Policies',
-  },
-  {
     key: '/evals',
     icon: <ExperimentOutlined />,
     label: 'Eval Harness',

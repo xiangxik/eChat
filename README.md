@@ -154,8 +154,8 @@ docker compose up --build
 2. Open `http://localhost:5174` and sign in with the `ADMIN_TOKEN` value from `.env`.
 3. In Providers, create an `OPENAI_COMPATIBLE` provider. Set the provider base URL, for example `https://api.openai.com/v1`, and paste your API key only in the admin form.
 4. In Models, create a `CHAT` model for that provider. Use the provider's model name, for example `gpt-4.1-mini`, enable streaming if the provider supports it, and save.
-5. In Context Policies, create a policy from the default DSL template, select the model, validate it, then save it.
-6. In Chatbots, create an enabled chatbot and attach the context policy.
+5. In Chatbots, create an enabled chatbot, then open its Workflow editor.
+6. Select the built-in `Start` node, choose the chat model, edit the node Context Policy DSL if needed, then save the workflow.
 7. Set `VITE_CHATBOT_ID` in `.env` to that chatbot id if it is not `1`, then restart chat-web with `docker compose up -d --build chat-web`.
 8. Open `http://localhost:5173` and send a message.
 
@@ -186,7 +186,7 @@ Expected health response:
 Then check:
 
 - `http://localhost:5174` loads admin-web and can sign in with `ADMIN_TOKEN`.
-- Admin can create provider, model, context policy, and chatbot records.
+- Admin can create provider, model, chatbot, and workflow node records.
 - `http://localhost:5173` loads chat-web and can send one message to the configured chatbot.
 
 ## Troubleshooting
@@ -195,7 +195,7 @@ Then check:
 - Flyway cannot create `vector`: ensure the image is `pgvector/pgvector:pg18`, then recreate local volumes with `docker compose down -v` if the database was initialized from a different image.
 - Admin login returns 401: use the exact `ADMIN_TOKEN` value from `.env`; changing it requires restarting `chatbot-service`.
 - Browser calls the wrong API URL: set `VITE_API_BASE_URL=http://localhost:8080` in `.env` and rebuild/restart the frontend container. The Docker image writes `/env.js` at container startup from this value.
-- Chat returns provider/model errors: create and enable provider, model, context policy, and chatbot in that order. A real provider API key must be entered through admin-web before real LLM calls can succeed.
+- Chat returns provider/model errors: create and enable provider, model, chatbot, and workflow node model settings in that order. A real provider API key must be entered through admin-web before real LLM calls can succeed.
 - Port already in use: change `SERVER_PORT`, `POSTGRES_PORT`, or `REDIS_PORT` in `.env`. For frontend host ports, edit the `5173:80` or `5174:80` mappings in `docker-compose.yml`.
 
 ## Test and Build
@@ -246,7 +246,7 @@ API keys must not be committed. Provider configuration responses never return pl
 - Set a high-entropy `API_KEY_ENCRYPTION_SECRET` and rotate provider keys through the admin API or an external secret manager before production use.
 - Replace the default `ADMIN_TOKEN`, configure explicit admin principals with least-privilege roles, terminate TLS at the edge, and set `ADMIN_COOKIE_SECURE=true` when serving admin-web over HTTPS.
 - Restrict `CORS_ALLOWED_ORIGINS` to deployed frontend origins, not broad localhost patterns.
-- Run PostgreSQL migrations before deploying new application versions and back up `provider_configs`, `context_policies`, `chatbot_configs`, conversations, memory, and audit tables.
+- Run PostgreSQL migrations before deploying new application versions and back up `provider_configs`, `chatbot_configs`, `chatbot_workflow_nodes`, `chatbot_workflow_transitions`, conversations, memory, and audit tables.
 - Keep Redis available for distributed rate limiting and chat stream state. The service has a local fallback, but it is per-process only.
 - Expose only required Actuator endpoints through the edge. Health can be public; metrics should be protected by infrastructure auth.
 - Ship logs to a centralized sink with `requestId`/`traceId`, and avoid logging message bodies or provider secrets.

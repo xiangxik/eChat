@@ -39,7 +39,7 @@ export function LoginPage() {
           <span>eChat Admin</span>
         </div>
         <Title level={2}>Admin Login</Title>
-        <Text type="secondary">Sign in to manage providers, models, chatbots, and context policies.</Text>
+        <Text type="secondary">Sign in to manage providers, models, chatbots, and workflows.</Text>
         <Form className="login-form" layout="vertical" requiredMark={false} onFinish={(values) => loginMutation.mutate(values)}>
           <Form.Item label="Username" name="username" rules={[{ max: 128 }]}>
             <Input autoComplete="username" />

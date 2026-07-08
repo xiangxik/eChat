@@ -28,9 +28,15 @@ public class ChatbotWorkflowNode extends AuditableEntity {
     @Column(name = "description", columnDefinition = "text")
     private String description;
 
-    @ManyToOne(fetch = FetchType.LAZY, optional = false)
-    @JoinColumn(name = "context_policy_id", nullable = false)
-    private ContextPolicy contextPolicy;
+    @Column(name = "dsl_content", nullable = false, columnDefinition = "text")
+    private String dslContent;
+
+    @Column(name = "version", nullable = false)
+    private int version = 1;
+
+    @ManyToOne(fetch = FetchType.LAZY)
+    @JoinColumn(name = "model_id")
+    private ModelConfig model;
 
     @Column(name = "enabled", nullable = false)
     private boolean enabled = true;
@@ -74,12 +80,28 @@ public class ChatbotWorkflowNode extends AuditableEntity {
         this.description = description;
     }
 
-    public ContextPolicy getContextPolicy() {
-        return contextPolicy;
+    public String getDslContent() {
+        return dslContent;
     }
 
-    public void setContextPolicy(ContextPolicy contextPolicy) {
-        this.contextPolicy = contextPolicy;
+    public void setDslContent(String dslContent) {
+        this.dslContent = dslContent;
+    }
+
+    public int getVersion() {
+        return version;
+    }
+
+    public void setVersion(int version) {
+        this.version = version;
+    }
+
+    public ModelConfig getModel() {
+        return model;
+    }
+
+    public void setModel(ModelConfig model) {
+        this.model = model;
     }
 
     public boolean isEnabled() {

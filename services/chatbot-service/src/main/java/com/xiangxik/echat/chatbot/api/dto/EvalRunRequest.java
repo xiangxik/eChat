@@ -11,7 +11,6 @@ public record EvalRunRequest(
         @NotNull Long datasetId,
         Long chatbotId,
         Long modelId,
-        Long contextPolicyId,
         @Min(1) Integer maxEstimatedTokens,
         @Min(1) Integer maxLatencyMillis,
         @DecimalMin("0.0") Double maxEstimatedCostUsd,

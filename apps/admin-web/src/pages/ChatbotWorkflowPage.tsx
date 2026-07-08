@@ -64,7 +64,7 @@ export function ChatbotWorkflowPage() {
 
   const chatbotQuery = useQuery({ queryKey: ['chatbots', chatbotId], queryFn: () => adminApi.getChatbot(chatbotId), enabled: Number.isFinite(chatbotId) });
   const workflowQuery = useQuery({ queryKey: ['chatbot-workflow', chatbotId], queryFn: () => adminApi.getChatbotWorkflow(chatbotId), enabled: Number.isFinite(chatbotId) });
-  const policiesQuery = useQuery({ queryKey: ['context-policies'], queryFn: adminApi.listContextPolicies });
+  const modelsQuery = useQuery({ queryKey: ['models'], queryFn: adminApi.listModels });
 
   useEffect(() => {
     if (!dragging) {
@@ -177,11 +177,9 @@ export function ChatbotWorkflowPage() {
     onError: (error) => message.error(error instanceof Error ? error.message : 'Debug message failed'),
   });
 
-  const policyOptions = (policiesQuery.data ?? []).map((policy) => ({ label: `${policy.name} v${policy.version}`, value: policy.id }));
-  const editablePolicyOptions = (policiesQuery.data ?? [])
-    .filter((policy) => !policy.systemManaged)
-    .map((policy) => ({ label: `${policy.name} v${policy.version}`, value: policy.id }));
-  const defaultPolicy = policiesQuery.data?.find((policy) => policy.name === 'Default Context Policy' && policy.systemManaged);
+  const modelOptions = (modelsQuery.data ?? [])
+    .filter((model) => model.enabled && model.modelType === 'CHAT')
+    .map((model) => ({ label: `${model.displayName} (${model.providerName})`, value: model.id }));
   const nodeOptions = nodes.map((node) => ({ label: `${node.name} (${node.nodeKey})`, value: node.nodeKey }));
   const positionedNodes = nodes.map((node, index) => ensureNodePosition(node, index));
   const nodeByKey = new Map(positionedNodes.map((node) => [node.nodeKey, node]));
@@ -189,9 +187,18 @@ export function ChatbotWorkflowPage() {
   const canvasHeight = Math.max(520, ...positionedNodes.map((node) => getNodePosition(node, 0).y + NODE_HEIGHT + 120));
 
   const openCreateNode = () => {
+    const nodeKey = nextNodeKey(nodes);
     setEditingNodeKey(undefined);
     nodeForm.resetFields();
-    nodeForm.setFieldsValue({ enabled: true, start: false } as NodeFormValues);
+    nodeForm.setFieldsValue({
+      nodeKey,
+      name: nodeKey,
+      dslContent: defaultNodeDsl(nodeKey),
+      version: 1,
+      modelId: modelOptions[0]?.value ?? null,
+      enabled: true,
+      start: false,
+    } as NodeFormValues);
     setNodeDrawerOpen(true);
   };
 
@@ -209,7 +216,7 @@ export function ChatbotWorkflowPage() {
       ...values,
       nodeKey: isEditingStart ? START_NODE_KEY : values.nodeKey,
       name: values.name,
-      contextPolicyId: isEditingStart ? defaultPolicy?.id ?? values.contextPolicyId : values.contextPolicyId,
+      modelId: isEditingStart ? null : values.modelId,
       enabled: isEditingStart ? true : values.enabled,
       start: isEditingStart ? true : values.start,
       metadata: previousNode?.metadata ?? defaultNodeMetadata(nodes.length),
@@ -240,16 +247,18 @@ export function ChatbotWorkflowPage() {
   };
 
   const createNodeAt = (position: NodePosition) => {
-    const contextPolicyId = editablePolicyOptions[0]?.value;
-    if (!contextPolicyId) {
-      message.warning('Create an editable context policy before adding workflow nodes');
+    const modelId = modelOptions[0]?.value;
+    if (!modelId) {
+      message.warning('Create an enabled chat model before adding workflow nodes');
       return;
     }
     const nodeKey = nextNodeKey(nodes);
     const nextNode = normalizeNode({
       nodeKey,
       name: nodeKey,
-      contextPolicyId,
+      dslContent: defaultNodeDsl(nodeKey),
+      version: 1,
+      modelId,
       enabled: true,
       start: false,
       metadata: position,
@@ -363,7 +372,7 @@ export function ChatbotWorkflowPage() {
 
   return (
     <div className="page-stack">
-      <ErrorAlert error={chatbotQuery.error ?? workflowQuery.error ?? policiesQuery.error} />
+      <ErrorAlert error={chatbotQuery.error ?? workflowQuery.error ?? modelsQuery.error} />
       {validationResult && !validationResult.valid && <Alert type="error" showIcon message="Workflow validation failed" description={validationResult.errors.join('\n')} />}
       {validationResult?.valid && validationResult.warnings.length > 0 && <Alert type="warning" showIcon message="Workflow warnings" description={validationResult.warnings.join('\n')} />}
       <Card className="admin-data-card">
@@ -444,7 +453,7 @@ export function ChatbotWorkflowPage() {
                 </svg>
                 {positionedNodes.map((node, index) => {
                   const position = getNodePosition(node, index);
-                  const policyName = policiesQuery.data?.find((policy) => policy.id === node.contextPolicyId)?.name ?? `#${node.contextPolicyId}`;
+                  const modelName = node.modelId ? modelsQuery.data?.find((model) => model.id === node.modelId)?.displayName ?? `Model #${node.modelId}` : 'System reply';
                   const isStartNode = node.nodeKey === START_NODE_KEY;
                   return (
                     <div
@@ -473,7 +482,7 @@ export function ChatbotWorkflowPage() {
                         </Space>
                       </div>
                       <div className="workflow-node-key">{node.nodeKey}</div>
-                      <div className="workflow-node-policy">{policyName}</div>
+                      <div className="workflow-node-policy">{modelName}</div>
                       <Tooltip title="Drag to another node">
                         <button className="workflow-node-connector" type="button" onPointerDown={(event) => startTransitionDrag(event, node)} />
                       </Tooltip>
@@ -539,8 +548,14 @@ export function ChatbotWorkflowPage() {
           <Form.Item name="description" label="Description">
             <Input.TextArea rows={3} />
           </Form.Item>
-          <Form.Item name="contextPolicyId" label="Context Policy" rules={[{ required: true }]}>
-            <Select showSearch optionFilterProp="label" options={editingNodeKey === START_NODE_KEY ? policyOptions : editablePolicyOptions} disabled={editingNodeKey === START_NODE_KEY} />
+          <Form.Item name="modelId" label="Model" rules={editingNodeKey === START_NODE_KEY ? [] : [{ required: true }]}> 
+            <Select showSearch allowClear optionFilterProp="label" options={modelOptions} disabled={editingNodeKey === START_NODE_KEY} />
+          </Form.Item>
+          <Form.Item name="version" label="Policy Version" rules={[{ required: true }]}> 
+            <InputNumber min={1} style={{ width: '100%' }} />
+          </Form.Item>
+          <Form.Item name="dslContent" label="Context Policy DSL" rules={[{ required: true }]}> 
+            <Input.TextArea rows={12} spellCheck={false} />
           </Form.Item>
           <Form.Item name="start" label="Start Node" valuePropName="checked">
             <Switch disabled={editingNodeKey === START_NODE_KEY} />
@@ -606,7 +621,9 @@ function normalizeNode(node: ChatbotWorkflowNode): ChatbotWorkflowNode {
     nodeKey: node.nodeKey.trim(),
     name: node.name.trim(),
     description: node.description?.trim() || undefined,
-    contextPolicyId: node.contextPolicyId,
+    dslContent: node.dslContent.trim(),
+    version: node.version ?? 1,
+    modelId: node.modelId ?? null,
     enabled: node.enabled !== false,
     start: node.start === true,
     metadata: node.metadata ?? {},
@@ -656,7 +673,20 @@ function withNodePosition(node: ChatbotWorkflowNode, position: NodePosition): Ch
 }
 
 function defaultNodeMetadata(index: number): Record<string, unknown> {
-  return getNodePosition({ nodeKey: '', name: '', contextPolicyId: 0, enabled: true, start: false }, index);
+  return getNodePosition({ nodeKey: '', name: '', dslContent: defaultNodeDsl('node'), version: 1, modelId: null, enabled: true, start: false }, index);
+}
+
+function defaultNodeDsl(nodeKey: string) {
+  return `<contextPolicy name="${nodeKey}" maxTokens="12000">
+  <system priority="100">You are a helpful assistant for ${nodeKey}.</system>
+  <variables>
+    <var name="conversation" source="conversation.messages" maxMessages="20" />
+  </variables>
+  <output>
+    <section name="system" />
+    <section name="conversation" />
+  </output>
+</contextPolicy>`;
 }
 
 function nextNodeKey(nodes: ChatbotWorkflowNode[]) {
@@ -686,7 +716,9 @@ function toNodeFormValues(node: ChatbotWorkflowNode): NodeFormValues {
     nodeKey: node.nodeKey,
     name: node.name,
     description: node.description,
-    contextPolicyId: node.contextPolicyId,
+    dslContent: node.dslContent,
+    version: node.version,
+    modelId: node.modelId,
     enabled: node.enabled,
     start: node.start,
   };

@@ -1,10 +1,10 @@
 # Harness Engineering
 
-Harness engineering in eChat means building repeatable evaluation loops around prompts, context policies, models, retrieval, and runtime settings. The goal is not to clone any proprietary agent framework, but to provide enterprise controls for measuring behavior before changes reach users.
+Harness engineering in eChat means building repeatable evaluation loops around prompts, workflow node context rules, models, retrieval, and runtime settings. The goal is not to clone any proprietary agent framework, but to provide enterprise controls for measuring behavior before changes reach users.
 
 ## Current Harness
 
-The admin eval harness stores datasets, cases, runs, and results. A run can target a chatbot, model, or context policy override and records context snapshots, token budget reports, scores, pass/fail status, and errors. This supports regression checks for context policy edits and provider/model changes.
+The admin eval harness stores datasets, cases, runs, and results. A run can target a chatbot or model override and records context snapshots, token budget reports, scores, pass/fail status, and errors. This supports regression checks for workflow node context edits and provider/model changes.
 
 ## Eval Enhancements
 
@@ -48,10 +48,10 @@ Cost and latency metrics are captured for every result under `scores.metrics`. L
 
 1. Create small datasets for critical chatbot jobs and known failure modes.
 2. Add expected behavior, required keywords, and forbidden phrases where useful.
-3. Run evaluations before changing production provider/model/context policy settings.
+3. Run evaluations before changing production provider, model, or workflow node context settings.
 4. Compare token budgets, context warnings, and output scores before rollout.
 5. Keep audit logs for configuration changes linked to evaluation runs.
 
 ## Enterprise Extensions
 
-Future phases should add scheduled evaluations, human review queues, LLM-as-judge rubric adapters, historical baseline comparison, and policy enforcement that prevents risky context policies from being enabled without a passing release gate.
+Future phases should add scheduled evaluations, human review queues, LLM-as-judge rubric adapters, historical baseline comparison, and policy enforcement that prevents risky workflow node context changes from being enabled without a passing release gate.

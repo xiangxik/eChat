@@ -30,10 +30,6 @@ public class EvalRun extends BaseEntity {
     @JoinColumn(name = "model_id")
     private ModelConfig model;
 
-    @ManyToOne(fetch = FetchType.LAZY)
-    @JoinColumn(name = "context_policy_id")
-    private ContextPolicy contextPolicy;
-
     @Enumerated(EnumType.STRING)
     @Column(name = "status", nullable = false, length = 32)
     private EvalRunStatus status = EvalRunStatus.PENDING;
@@ -70,14 +66,6 @@ public class EvalRun extends BaseEntity {
 
     public void setModel(ModelConfig model) {
         this.model = model;
-    }
-
-    public ContextPolicy getContextPolicy() {
-        return contextPolicy;
-    }
-
-    public void setContextPolicy(ContextPolicy contextPolicy) {
-        this.contextPolicy = contextPolicy;
     }
 
     public EvalRunStatus getStatus() {

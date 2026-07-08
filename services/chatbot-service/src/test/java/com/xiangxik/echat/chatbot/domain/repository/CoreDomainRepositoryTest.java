@@ -3,7 +3,6 @@ package com.xiangxik.echat.chatbot.domain.repository;
 import com.xiangxik.echat.chatbot.PostgresIntegrationTest;
 import com.xiangxik.echat.chatbot.domain.model.ChatbotConfig;
 import com.xiangxik.echat.chatbot.domain.model.ChatbotWorkflowNode;
-import com.xiangxik.echat.chatbot.domain.model.ContextPolicy;
 import com.xiangxik.echat.chatbot.domain.model.Conversation;
 import com.xiangxik.echat.chatbot.domain.model.ConversationStatus;
 import com.xiangxik.echat.chatbot.domain.model.MemoryItem;
@@ -34,9 +33,6 @@ class CoreDomainRepositoryTest extends PostgresIntegrationTest {
 
     @Autowired
     private ModelConfigRepository modelConfigRepository;
-
-    @Autowired
-    private ContextPolicyRepository contextPolicyRepository;
 
     @Autowired
     private ChatbotConfigRepository chatbotConfigRepository;
@@ -73,12 +69,6 @@ class CoreDomainRepositoryTest extends PostgresIntegrationTest {
         model.setMetadata(Map.of("tier", "production"));
         model = modelConfigRepository.save(model);
 
-        ContextPolicy policy = new ContextPolicy();
-        policy.setName("Default Harness " + suffix);
-        policy.setDslContent("<context><conversation/><retrievalResults/></context>");
-        policy.setModel(model);
-        policy = contextPolicyRepository.save(policy);
-
         ChatbotConfig chatbot = new ChatbotConfig();
         chatbot.setName("Support Bot " + suffix);
         chatbot = chatbotConfigRepository.save(chatbot);
@@ -87,7 +77,16 @@ class CoreDomainRepositoryTest extends PostgresIntegrationTest {
         node.setChatbot(chatbot);
         node.setNodeKey("start");
         node.setName("Start");
-        node.setContextPolicy(policy);
+        node.setDslContent("""
+                <contextPolicy name="repository-test" maxTokens="12000">
+                    <system priority="100">Repository test assistant.</system>
+                    <output>
+                        <section name="system" />
+                    </output>
+                </contextPolicy>
+                """);
+        node.setVersion(1);
+        node.setModel(model);
         node.setStart(true);
         node.setEnabled(true);
         workflowNodeRepository.save(node);

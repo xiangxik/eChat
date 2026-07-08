@@ -19,6 +19,9 @@ spring:
     enabled: true
     placeholders:
       embeddingDimension: ${CONTEXT_EMBEDDING_DIMENSION:1536}
+      adminToken: ${echat.security.admin-token:dev-admin-token}
+      adminDisplayName: ${ADMIN_DISPLAY_NAME:Local Admin}
+      adminTenantId: ${ADMIN_TENANT_ID:default}
   data:
     redis:
       host: ${REDIS_HOST:localhost}

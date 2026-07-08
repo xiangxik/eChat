@@ -4,7 +4,6 @@ import com.xiangxik.echat.chatbot.PostgresIntegrationTest;
 import com.xiangxik.echat.chatbot.domain.model.ChatbotConfig;
 import com.xiangxik.echat.chatbot.domain.model.ChatbotWorkflowNode;
 import com.xiangxik.echat.chatbot.domain.model.ChatbotWorkflowTransition;
-import com.xiangxik.echat.chatbot.domain.model.ContextPolicy;
 import com.xiangxik.echat.chatbot.domain.model.ModelConfig;
 import com.xiangxik.echat.chatbot.domain.model.ModelType;
 import com.xiangxik.echat.chatbot.domain.model.ProviderConfig;
@@ -12,12 +11,11 @@ import com.xiangxik.echat.chatbot.domain.model.ProviderType;
 import com.xiangxik.echat.chatbot.domain.repository.ChatbotConfigRepository;
 import com.xiangxik.echat.chatbot.domain.repository.ChatbotWorkflowNodeRepository;
 import com.xiangxik.echat.chatbot.domain.repository.ChatbotWorkflowTransitionRepository;
-import com.xiangxik.echat.chatbot.domain.repository.ContextPolicyRepository;
 import com.xiangxik.echat.chatbot.domain.repository.MessageRepository;
 import com.xiangxik.echat.chatbot.domain.repository.ModelConfigRepository;
 import com.xiangxik.echat.chatbot.domain.repository.ProviderConfigRepository;
 import com.xiangxik.echat.chatbot.service.ApiKeyProtector;
-import com.xiangxik.echat.chatbot.service.ContextPolicyService;
+import com.xiangxik.echat.chatbot.service.ChatbotWorkflowService;
 import com.xiangxik.echat.chatbot.service.llm.LlmChatRequest;
 import com.xiangxik.echat.chatbot.service.llm.LlmChatResponse;
 import com.xiangxik.echat.chatbot.service.llm.LlmProviderClient;
@@ -67,9 +65,6 @@ class ChatRuntimeControllerTest extends PostgresIntegrationTest {
 
     @Autowired
     private ModelConfigRepository modelConfigRepository;
-
-    @Autowired
-    private ContextPolicyRepository contextPolicyRepository;
 
     @Autowired
     private ChatbotConfigRepository chatbotConfigRepository;
@@ -203,14 +198,7 @@ class ChatRuntimeControllerTest extends PostgresIntegrationTest {
         chatbot.setEnabled(true);
         chatbot = chatbotConfigRepository.saveAndFlush(chatbot);
 
-        ContextPolicy policy = new ContextPolicy();
-        policy.setName("Runtime no model policy " + UUID.randomUUID());
-        policy.setDslContent(runtimePolicyDsl());
-        policy.setVersion(1);
-        policy.setEnabled(true);
-        policy = contextPolicyRepository.saveAndFlush(policy);
-
-        createStartNode(chatbot, policy);
+        createStartNode(chatbot, runtimePolicyDsl(), null);
 
         Long conversationId = createConversation(chatbot.getId());
 
@@ -233,9 +221,7 @@ class ChatRuntimeControllerTest extends PostgresIntegrationTest {
             chatbot.setEnabled(true);
             chatbot = chatbotConfigRepository.saveAndFlush(chatbot);
 
-            ContextPolicy defaultPolicy = contextPolicyRepository.findByName(ContextPolicyService.DEFAULT_CONTEXT_POLICY_NAME)
-                .orElseThrow();
-            createNode(chatbot, defaultPolicy, "Start", "Start", true);
+            createNode(chatbot, ChatbotWorkflowService.DEFAULT_START_NODE_DSL, null, "Start", "Start", true);
 
             Long conversationId = createConversation(chatbot.getId());
 
@@ -293,23 +279,13 @@ class ChatRuntimeControllerTest extends PostgresIntegrationTest {
             model.setEnabled(true);
             model = modelConfigRepository.saveAndFlush(model);
 
-            ContextPolicy nextPolicy = new ContextPolicy();
-            nextPolicy.setName("Runtime broken key policy " + suffix);
-            nextPolicy.setDslContent(runtimePolicyDsl());
-            nextPolicy.setVersion(1);
-            nextPolicy.setModel(model);
-            nextPolicy.setEnabled(true);
-            nextPolicy = contextPolicyRepository.saveAndFlush(nextPolicy);
-
             ChatbotConfig chatbot = new ChatbotConfig();
             chatbot.setName("Runtime broken key bot " + suffix);
             chatbot.setEnabled(true);
             chatbot = chatbotConfigRepository.saveAndFlush(chatbot);
 
-            ContextPolicy defaultPolicy = contextPolicyRepository.findByName(ContextPolicyService.DEFAULT_CONTEXT_POLICY_NAME)
-                .orElseThrow();
-            ChatbotWorkflowNode startNode = createNode(chatbot, defaultPolicy, "Start", "Start", true);
-            ChatbotWorkflowNode nextNode = createNode(chatbot, nextPolicy, "FAQ", "FAQ", false);
+            ChatbotWorkflowNode startNode = createNode(chatbot, ChatbotWorkflowService.DEFAULT_START_NODE_DSL, null, "Start", "Start", true);
+            ChatbotWorkflowNode nextNode = createNode(chatbot, runtimePolicyDsl(), model, "FAQ", "FAQ", false);
             ChatbotWorkflowTransition transition = new ChatbotWorkflowTransition();
             transition.setChatbot(chatbot);
             transition.setName("Always route");
@@ -366,20 +342,12 @@ class ChatRuntimeControllerTest extends PostgresIntegrationTest {
         model.setEnabled(true);
         model = modelConfigRepository.saveAndFlush(model);
 
-                ContextPolicy policy = new ContextPolicy();
-                policy.setName("Runtime policy " + suffix);
-                policy.setDslContent(runtimePolicyDsl());
-                policy.setVersion(1);
-                policy.setModel(model);
-                policy.setEnabled(true);
-                policy = contextPolicyRepository.saveAndFlush(policy);
-
         ChatbotConfig chatbot = new ChatbotConfig();
         chatbot.setName("Runtime bot " + suffix);
         chatbot.setEnabled(true);
         chatbot = chatbotConfigRepository.saveAndFlush(chatbot);
-        ChatbotWorkflowNode startNode = createNode(chatbot, policy, "start", "Start", true);
-        ChatbotWorkflowNode billingNode = createNode(chatbot, policy, "billing", "Billing", false);
+        ChatbotWorkflowNode startNode = createNode(chatbot, runtimePolicyDsl(), model, "start", "Start", true);
+        ChatbotWorkflowNode billingNode = createNode(chatbot, runtimePolicyDsl(), model, "billing", "Billing", false);
         ChatbotWorkflowTransition transition = new ChatbotWorkflowTransition();
         transition.setChatbot(chatbot);
         transition.setName("Route to billing");
@@ -392,17 +360,19 @@ class ChatRuntimeControllerTest extends PostgresIntegrationTest {
         return chatbot.getId();
     }
 
-    private void createStartNode(ChatbotConfig chatbot, ContextPolicy policy) {
-        createNode(chatbot, policy, "start", "Start", true);
+    private void createStartNode(ChatbotConfig chatbot, String dslContent, ModelConfig model) {
+        createNode(chatbot, dslContent, model, "start", "Start", true);
     }
 
-    private ChatbotWorkflowNode createNode(ChatbotConfig chatbot, ContextPolicy policy, String nodeKey, String name,
+    private ChatbotWorkflowNode createNode(ChatbotConfig chatbot, String dslContent, ModelConfig model, String nodeKey, String name,
                                            boolean start) {
         ChatbotWorkflowNode node = new ChatbotWorkflowNode();
         node.setChatbot(chatbot);
         node.setNodeKey(nodeKey);
         node.setName(name);
-        node.setContextPolicy(policy);
+        node.setDslContent(dslContent);
+        node.setVersion(1);
+        node.setModel(model);
         node.setStart(start);
         node.setEnabled(true);
         return workflowNodeRepository.saveAndFlush(node);

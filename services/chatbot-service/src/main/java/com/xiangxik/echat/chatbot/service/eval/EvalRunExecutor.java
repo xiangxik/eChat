@@ -4,7 +4,6 @@ import com.fasterxml.jackson.core.type.TypeReference;
 import com.fasterxml.jackson.databind.ObjectMapper;
 import com.xiangxik.echat.chatbot.domain.model.ChatbotConfig;
 import com.xiangxik.echat.chatbot.domain.model.ChatbotWorkflowNode;
-import com.xiangxik.echat.chatbot.domain.model.ContextPolicy;
 import com.xiangxik.echat.chatbot.domain.model.EvalCase;
 import com.xiangxik.echat.chatbot.domain.model.EvalResult;
 import com.xiangxik.echat.chatbot.domain.model.EvalRun;
@@ -186,11 +185,8 @@ public class EvalRunExecutor {
 
     private RunConfiguration configuration(EvalRun run) {
         ChatbotConfig chatbot = run.getChatbot();
-        ContextPolicy contextPolicy = run.getContextPolicy() == null ? defaultWorkflowPolicy(chatbot) : run.getContextPolicy();
-        if (contextPolicy == null || !contextPolicy.isEnabled()) {
-            throw new IllegalStateException("Eval run has no enabled context policy");
-        }
-        ModelConfig model = run.getModel() == null ? contextPolicy.getModel() : run.getModel();
+        ChatbotWorkflowNode startNode = defaultWorkflowStartNode(chatbot);
+        ModelConfig model = run.getModel() == null ? startNode.getModel() : run.getModel();
         if (model == null || !model.isEnabled()) {
             throw new IllegalStateException("Eval run has no enabled model");
         }
@@ -198,7 +194,7 @@ public class EvalRunExecutor {
         if (provider == null || !provider.isEnabled()) {
             throw new IllegalStateException("Eval run model has no enabled provider");
         }
-        ContextPolicyDefinition policy = contextPolicyValidator.validateAndParse(contextPolicy.getDslContent());
+        ContextPolicyDefinition policy = contextPolicyValidator.validateAndParse(startNode.getDslContent());
         Integer maxEstimatedTokens = number(run.getSummary().get("maxEstimatedTokens"));
         Integer maxLatencyMillis = number(run.getSummary().get("maxLatencyMillis"));
         Double maxEstimatedCostUsd = decimalObject(run.getSummary().get("maxEstimatedCostUsd"));
@@ -211,10 +207,10 @@ public class EvalRunExecutor {
                 forbiddenPhrases, rubric, booleanValue(run.getSummary().get("goldenReplay"), true));
     }
 
-    private ContextPolicy defaultWorkflowPolicy(ChatbotConfig chatbot) {
+    private ChatbotWorkflowNode defaultWorkflowStartNode(ChatbotConfig chatbot) {
         ChatbotWorkflowNode startNode = workflowNodeRepository.findByChatbotIdAndStartTrueAndEnabledTrue(chatbot.getId())
                 .orElseThrow(() -> new IllegalStateException("Eval run chatbot has no enabled workflow start node"));
-        return startNode.getContextPolicy();
+        return startNode;
     }
 
     private Map<String, Object> contextSnapshot(ContextAssemblyResult contextResult, EvalCase evalCase,

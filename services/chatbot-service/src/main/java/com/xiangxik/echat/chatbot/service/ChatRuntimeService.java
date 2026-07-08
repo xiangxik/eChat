@@ -12,7 +12,6 @@ import com.xiangxik.echat.chatbot.api.dto.ChatStreamEventResponse;
 import com.xiangxik.echat.chatbot.domain.model.ChatbotConfig;
 import com.xiangxik.echat.chatbot.domain.model.ChatbotWorkflowNode;
 import com.xiangxik.echat.chatbot.domain.model.ChatbotWorkflowTransition;
-import com.xiangxik.echat.chatbot.domain.model.ContextPolicy;
 import com.xiangxik.echat.chatbot.domain.model.Conversation;
 import com.xiangxik.echat.chatbot.domain.model.Message;
 import com.xiangxik.echat.chatbot.domain.model.MessageRole;
@@ -313,20 +312,20 @@ public class ChatRuntimeService {
             ChatbotConfig chatbot = conversation.getChatbot();
             validateChatbot(chatbot);
             ChatbotWorkflowNode workflowNode = resolveWorkflowNode(conversation);
-            ContextPolicy contextPolicy = resolveContextPolicy(workflowNode);
-                Message userMessage = messageService.create(conversationId, MessageRole.USER, message,
+            ContextPolicyDefinition policy = parseWorkflowNodePolicy(workflowNode);
+            Message userMessage = messageService.create(conversationId, MessageRole.USER, message,
                     tokenEstimator.estimate(message), requestMetadata(metadata, context));
-                ContextAssemblyResult contextResult = assembleContext(conversation, workflowNode, contextPolicy, message,
+                ContextAssemblyResult contextResult = assembleContext(conversation, workflowNode, policy, message,
                     metadata, context);
-                if (isDefaultWelcomePolicy(contextPolicy)) {
+                if (isModelLessSystemReplyNode(workflowNode)) {
                 log.info("audit.chat.message.received requestId={} traceId={} conversationId={} userMessageId={} contextTokens={}",
                     context.requestId(), context.traceId(), conversationId, userMessage.getId(),
                     contextResult.tokenBudgetReport().totalEstimatedTokens());
                 return new PreparedInvocation(toConversationResponse(conversation), conversation.getUserId(), userMessage,
                     null, null, null, null, contextResult, workflowNode, metadata, true,
-                    systemReplyContent(contextPolicy));
+                    systemReplyContent(policy));
                 }
-            ModelConfig model = contextPolicy.getModel();
+            ModelConfig model = workflowNode.getModel();
             validateModel(model);
             ProviderConfig provider = model.getProvider();
             validateProvider(provider);
@@ -345,10 +344,9 @@ public class ChatRuntimeService {
     }
 
     private ContextAssemblyResult assembleContext(Conversation conversation, ChatbotWorkflowNode workflowNode,
-                                                  ContextPolicy contextPolicy, String latestUserMessage,
+                                                  ContextPolicyDefinition policy, String latestUserMessage,
                                                   Map<String, Object> metadata, RuntimeRequestContext requestContext) {
         List<Message> messages = messageService.listByConversation(conversation.getId());
-        ContextPolicyDefinition policy = contextPolicyValidator.validateAndParse(contextPolicy.getDslContent());
         ContextMemoryBundle memoryBundle = contextMemoryResolver.resolve(policy, conversation.getChatbot().getId(),
             conversation.getId(), conversation.getUserId(), latestUserMessage, metadata, messages);
         Map<String, Object> runtime = new LinkedHashMap<>();
@@ -386,22 +384,20 @@ public class ChatRuntimeService {
         return workflowNode;
     }
 
-    private ContextPolicy resolveContextPolicy(ChatbotWorkflowNode workflowNode) {
-        ContextPolicy contextPolicy = workflowNode.getContextPolicy();
-        if (contextPolicy == null || !contextPolicy.isEnabled()) {
-            throw new ChatRuntimeException("WORKFLOW_NODE_POLICY_NOT_CONFIGURED", "Workflow node has no enabled context policy configured",
+    private ContextPolicyDefinition parseWorkflowNodePolicy(ChatbotWorkflowNode workflowNode) {
+        if (!StringUtils.hasText(workflowNode.getDslContent())) {
+            throw new ChatRuntimeException("WORKFLOW_NODE_POLICY_NOT_CONFIGURED", "Workflow node has no context policy configured",
                     HttpStatus.CONFLICT);
         }
-        return contextPolicy;
+        return contextPolicyValidator.validateAndParse(workflowNode.getDslContent());
     }
 
-    private boolean isDefaultWelcomePolicy(ContextPolicy contextPolicy) {
-        return contextPolicy.isSystemManaged()
-                && ContextPolicyService.DEFAULT_CONTEXT_POLICY_NAME.equals(contextPolicy.getName());
+    private boolean isModelLessSystemReplyNode(ChatbotWorkflowNode workflowNode) {
+        return workflowNode.getModel() == null && ChatbotWorkflowService.START_NODE_KEY.equals(workflowNode.getNodeKey());
     }
 
-    private String systemReplyContent(ContextPolicy contextPolicy) {
-        return contextPolicyValidator.validateAndParse(contextPolicy.getDslContent()).systemBlocks().stream()
+    private String systemReplyContent(ContextPolicyDefinition policy) {
+        return policy.systemBlocks().stream()
                 .sorted(java.util.Comparator.comparingInt(ContextPolicyDefinition.SystemBlock::priority).reversed())
                 .map(ContextPolicyDefinition.SystemBlock::content)
                 .map(content -> content.replaceFirst("(?is)^\\s*Reply\\s+with\\s+exactly:\\s*", "").strip())

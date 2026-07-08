@@ -98,7 +98,9 @@ export interface ChatbotWorkflowNode {
   nodeKey: string;
   name: string;
   description?: string;
-  contextPolicyId: number;
+  dslContent: string;
+  version: number;
+  modelId: number | null;
   enabled: boolean;
   start: boolean;
   metadata?: Record<string, unknown>;
@@ -190,92 +192,6 @@ export interface ChatRuntimeResponse {
   contextWarnings: string[];
 }
 
-export interface ContextPolicy {
-  id: number;
-  name: string;
-  description?: string;
-  dslContent: string;
-  version: number;
-  modelId: number | null;
-  enabled: boolean;
-  systemManaged?: boolean;
-  createdAt?: string;
-  updatedAt?: string;
-}
-
-export interface ContextPolicyRequest {
-  name: string;
-  description?: string;
-  dslContent: string;
-  version?: number;
-  modelId: number | null;
-  enabled?: boolean;
-}
-
-export interface ContextPolicyDslError {
-  line: number;
-  tag: string;
-  reason: string;
-}
-
-export interface ContextPolicyValidationResult {
-  valid: boolean;
-  errors: ContextPolicyDslError[];
-  warnings: string[];
-  policyName?: string;
-  maxTokens: number;
-}
-
-export interface ContextMessage {
-  role: string;
-  content: string;
-  metadata?: Record<string, unknown>;
-}
-
-export interface ContextMemoryItem {
-  content: string;
-  score?: number;
-  metadata?: Record<string, unknown>;
-}
-
-export interface ContextAssemblyRequest {
-  chatbotId?: number;
-  conversationId?: number;
-  userId?: string;
-  latestUserMessage?: string;
-  metadata?: Record<string, unknown>;
-  conversation?: ContextMessage[];
-  shortTermMemory?: ContextMemoryItem[];
-  longTermMemory?: ContextMemoryItem[];
-  userProfile?: Record<string, unknown>;
-  retrievalResults?: ContextMemoryItem[];
-  toolResults?: ContextMemoryItem[];
-  runtime?: Record<string, unknown>;
-}
-
-export interface ContextSection {
-  name: string;
-  role: string;
-  content: string;
-  estimatedTokens: number;
-  included: boolean;
-}
-
-export interface TokenBudgetReport {
-  maxTokens: number;
-  reservedBySection: Record<string, number>;
-  actualTokensBySection: Record<string, number>;
-  totalEstimatedTokens: number;
-  truncatedSections: string[];
-}
-
-export interface ContextAssemblyResult {
-  messages: ContextMessage[];
-  sections: ContextSection[];
-  tokenBudgetReport: TokenBudgetReport;
-  warnings: string[];
-}
-
 export interface EvalDataset {
   id: number;
   name: string;
@@ -311,7 +227,6 @@ export interface EvalRunRequest {
   datasetId: number;
   chatbotId?: number;
   modelId?: number;
-  contextPolicyId?: number;
   maxEstimatedTokens?: number;
   maxLatencyMillis?: number;
   maxEstimatedCostUsd?: number;
@@ -328,7 +243,6 @@ export interface EvalRun {
   datasetId: number;
   chatbotId: number;
   modelId?: number;
-  contextPolicyId?: number;
   status: 'PENDING' | 'RUNNING' | 'COMPLETED' | 'FAILED';
   startedAt?: string;
   finishedAt?: string;
@@ -472,23 +386,6 @@ export const adminApi = {
     apiRequest<ChatConversationCreateResponse>('/api/chat/conversations', { method: 'POST', body: jsonBody(request) }),
   sendChatMessage: (conversationId: number, request: ChatMessageRequest) =>
     apiRequest<ChatRuntimeResponse>(`/api/chat/conversations/${conversationId}/messages`, { method: 'POST', body: jsonBody(request) }),
-
-  listContextPolicies: () => apiRequest<ContextPolicy[]>('/api/admin/context-policies'),
-  createContextPolicy: (request: ContextPolicyRequest) =>
-    apiRequest<ContextPolicy>('/api/admin/context-policies', { method: 'POST', body: jsonBody(request) }),
-  updateContextPolicy: (id: number, request: ContextPolicyRequest) =>
-    apiRequest<ContextPolicy>(`/api/admin/context-policies/${id}`, { method: 'PUT', body: jsonBody(request) }),
-  deleteContextPolicy: (id: number) => apiRequest<void>(`/api/admin/context-policies/${id}`, { method: 'DELETE' }),
-  validateContextPolicy: (dslContent: string) =>
-    apiRequest<ContextPolicyValidationResult>('/api/admin/context-policies/validate', {
-      method: 'POST',
-      body: jsonBody({ dslContent }),
-    }),
-  previewContextPolicy: (id: number, request: ContextAssemblyRequest) =>
-    apiRequest<ContextAssemblyResult>(`/api/admin/context-policies/${id}/preview`, {
-      method: 'POST',
-      body: jsonBody(request),
-    }),
 
   listEvalDatasets: () => apiRequest<EvalDataset[]>('/api/admin/eval-datasets'),
   createEvalDataset: (request: EvalDatasetRequest) =>

@@ -5,14 +5,12 @@ import com.fasterxml.jackson.databind.ObjectMapper;
 import com.xiangxik.echat.chatbot.PostgresIntegrationTest;
 import com.xiangxik.echat.chatbot.domain.model.ChatbotConfig;
 import com.xiangxik.echat.chatbot.domain.model.ChatbotWorkflowNode;
-import com.xiangxik.echat.chatbot.domain.model.ContextPolicy;
 import com.xiangxik.echat.chatbot.domain.model.ModelConfig;
 import com.xiangxik.echat.chatbot.domain.model.ModelType;
 import com.xiangxik.echat.chatbot.domain.model.ProviderConfig;
 import com.xiangxik.echat.chatbot.domain.model.ProviderType;
 import com.xiangxik.echat.chatbot.domain.repository.ChatbotConfigRepository;
 import com.xiangxik.echat.chatbot.domain.repository.ChatbotWorkflowNodeRepository;
-import com.xiangxik.echat.chatbot.domain.repository.ContextPolicyRepository;
 import com.xiangxik.echat.chatbot.domain.repository.ConversationRepository;
 import com.xiangxik.echat.chatbot.domain.repository.ModelConfigRepository;
 import com.xiangxik.echat.chatbot.domain.repository.ProviderConfigRepository;
@@ -64,9 +62,6 @@ class EvalAdminControllerTest extends PostgresIntegrationTest {
 
     @Autowired
     private ModelConfigRepository modelConfigRepository;
-
-    @Autowired
-    private ContextPolicyRepository contextPolicyRepository;
 
     @Autowired
     private ChatbotConfigRepository chatbotConfigRepository;
@@ -225,14 +220,6 @@ class EvalAdminControllerTest extends PostgresIntegrationTest {
         model.setEnabled(true);
         model = modelConfigRepository.saveAndFlush(model);
 
-        ContextPolicy policy = new ContextPolicy();
-        policy.setName("Eval policy " + suffix);
-        policy.setDslContent(evalPolicyDsl());
-        policy.setVersion(1);
-        policy.setModel(model);
-        policy.setEnabled(true);
-        policy = contextPolicyRepository.saveAndFlush(policy);
-
         ChatbotConfig chatbot = new ChatbotConfig();
         chatbot.setName("Eval bot " + suffix);
         chatbot.setEnabled(true);
@@ -242,7 +229,9 @@ class EvalAdminControllerTest extends PostgresIntegrationTest {
         node.setChatbot(chatbot);
         node.setNodeKey("start");
         node.setName("Start");
-        node.setContextPolicy(policy);
+        node.setDslContent(evalPolicyDsl());
+        node.setVersion(1);
+        node.setModel(model);
         node.setStart(true);
         node.setEnabled(true);
         workflowNodeRepository.saveAndFlush(node);

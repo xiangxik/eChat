@@ -8,7 +8,6 @@ public record EvalRunResponse(
         Long datasetId,
         Long chatbotId,
         Long modelId,
-        Long contextPolicyId,
         String status,
         Instant startedAt,
         Instant finishedAt,
