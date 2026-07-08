@@ -10,7 +10,7 @@ import org.springframework.validation.annotation.Validated;
 
 @Validated
 @ConfigurationProperties(prefix = "echat")
-public record ChatbotProperties(Service service, Llm llm, Context context, Security security) {
+public record ChatbotProperties(Service service, Llm llm, Context context, Security security, Bootstrap bootstrap) {
 
     public record Service(@NotBlank String version) {
     }
@@ -51,5 +51,27 @@ public record ChatbotProperties(Service service, Llm llm, Context context, Secur
             roles = roles == null ? List.of() : List.copyOf(roles);
             attributes = attributes == null ? Map.of() : Map.copyOf(attributes);
         }
+    }
+
+    public record Bootstrap(List<@Valid ProviderSeedProperties> providers) {
+        public Bootstrap {
+            providers = providers == null ? List.of() : List.copyOf(providers);
+        }
+    }
+
+    public record ProviderSeedProperties(
+            @NotBlank String name,
+            ProviderSeedType type,
+            @NotBlank String baseUrl
+    ) {
+    }
+
+    public enum ProviderSeedType {
+        OPENAI_COMPATIBLE,
+        ANTHROPIC,
+        AZURE_OPENAI,
+        GEMINI,
+        OLLAMA,
+        CUSTOM
     }
 }

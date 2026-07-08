@@ -131,7 +131,7 @@ Use `docker compose down -v` only when you intentionally want to delete the loca
 
 ## Database Migrations
 
-Flyway migrations live in `services/chatbot-service/src/main/resources/db/migration`. They run automatically when `chatbot-service` starts. `V1__init_schema.sql` creates the `vector` extension and core tables, and later migrations evolve memory, eval, and audit features.
+Flyway migrations live in `services/chatbot-service/src/main/resources/db/migration`. They run automatically when `chatbot-service` starts. `V1__init_schema.sql` now represents the full zero-to-one schema for local re-initialization, including workflow, eval, audit, and RBAC tables. Default bootstrap providers are configured in `services/chatbot-service/src/main/resources/application.yml` under `echat.bootstrap.providers`.
 
 For local Docker Compose, the `pgvector/pgvector:pg18` image creates the configured database and the app runs migrations against it using:
 

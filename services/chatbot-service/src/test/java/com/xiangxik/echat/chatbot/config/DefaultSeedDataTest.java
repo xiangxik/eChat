@@ -55,8 +55,8 @@ class DefaultSeedDataTest extends PostgresIntegrationTest {
         AdminUser adminUser = adminUserRepository.findByUsername("admin").orElseThrow();
         assertTrue(adminUser.isEnabled());
         assertTrue(adminUser.isSystemUser());
-        assertEquals("Local Admin", adminUser.getDisplayName());
-        assertEquals("default", adminUser.getTenantId());
+        assertEquals("Test Admin", adminUser.getDisplayName());
+        assertEquals("tenant-a", adminUser.getTenantId());
         assertTrue(passwordEncoder.matches("test-admin-token", adminUser.getPasswordHash()));
         assertEquals("SUPER_ADMIN", superAdminRole.getCode());
         assertTrue(superAdminRole.isSystemRole());

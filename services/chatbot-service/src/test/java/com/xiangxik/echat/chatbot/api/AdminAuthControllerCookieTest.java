@@ -35,7 +35,8 @@ class AdminAuthControllerCookieTest {
                 new ChatbotProperties.Service("0.1.0"),
                 new ChatbotProperties.Llm("openai-compatible", "gpt-test", "http://localhost", "", 0.2, 1024),
                 new ChatbotProperties.Context(12000, 20, 1536),
-            new ChatbotProperties.Security("test-only-change-this-32-byte-secret", "test-admin-token",
-                List.of("http://localhost:*"), 1000, 1000, adminCookieSecure, List.of()));
+                new ChatbotProperties.Security("test-only-change-this-32-byte-secret", "test-admin-token",
+                        List.of("http://localhost:*"), 1000, 1000, adminCookieSecure, List.of()),
+                new ChatbotProperties.Bootstrap(List.of()));
     }
 }
