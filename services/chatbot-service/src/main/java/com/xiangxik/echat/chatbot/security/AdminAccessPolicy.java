@@ -18,6 +18,7 @@ public class AdminAccessPolicy {
             return false;
         }
         Set<String> roles = roles(authentication);
+        Set<String> permissions = permissions(authentication);
         if (!tenantAllowed(request, authentication, roles)) {
             return false;
         }
@@ -26,13 +27,18 @@ public class AdminAccessPolicy {
         if (path.startsWith("/api/admin/auth/")) {
             return true;
         }
+        if (path.startsWith("/api/admin/identity")) {
+            return hasAny(roles, "SUPER_ADMIN", "ADMIN") || permissions.contains("RBAC_MANAGE");
+        }
         if (path.startsWith("/api/admin/audit-logs")) {
-            return "GET".equals(method) && hasAny(roles, "SUPER_ADMIN", "ADMIN", "AUDITOR");
+            return "GET".equals(method) && (hasAny(roles, "SUPER_ADMIN", "ADMIN", "AUDITOR")
+                    || permissions.contains("AUDIT_READ"));
         }
         if ("GET".equals(method)) {
-            return hasAny(roles, "SUPER_ADMIN", "ADMIN", "AUDITOR", "VIEWER");
+            return hasAny(roles, "SUPER_ADMIN", "ADMIN", "AUDITOR", "VIEWER")
+                    || permissions.contains("ADMIN_READ");
         }
-        return hasAny(roles, "SUPER_ADMIN", "ADMIN");
+        return hasAny(roles, "SUPER_ADMIN", "ADMIN") || permissions.contains("ADMIN_WRITE");
     }
 
     private boolean tenantAllowed(HttpServletRequest request, Authentication authentication, Set<String> roles) {
@@ -56,6 +62,18 @@ public class AdminAccessPolicy {
                 .map(authority -> authority.startsWith("ROLE_") ? authority.substring("ROLE_".length()) : authority)
                 .map(role -> role.toUpperCase(Locale.ROOT))
                 .collect(java.util.stream.Collectors.toUnmodifiableSet());
+    }
+
+    private Set<String> permissions(Authentication authentication) {
+        if (authentication.getPrincipal() instanceof AdminPrincipal principal
+                && principal.attributes().get("permissions") instanceof Set<?> permissions) {
+            return permissions.stream()
+                    .filter(String.class::isInstance)
+                    .map(String.class::cast)
+                    .map(permission -> permission.toUpperCase(Locale.ROOT))
+                    .collect(java.util.stream.Collectors.toUnmodifiableSet());
+        }
+        return Set.of();
     }
 
     private boolean hasAny(Set<String> roles, String... requiredRoles) {

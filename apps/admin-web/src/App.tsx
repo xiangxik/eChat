@@ -6,10 +6,11 @@ import {
   ExperimentOutlined,
   LogoutOutlined,
   MessageOutlined,
+  SafetyCertificateOutlined,
   RobotOutlined,
   UserOutlined,
 } from '@ant-design/icons';
-import { Button, Layout, Menu, Space, Typography, message } from 'antd';
+import { Button, Layout, Menu, Typography, message } from 'antd';
 import { useQueryClient } from '@tanstack/react-query';
 import { useState } from 'react';
 import { Link, Outlet, useLocation, useNavigate } from 'react-router-dom';
@@ -66,6 +67,12 @@ const routeItems = [
     icon: <ExperimentOutlined />,
     label: 'Eval Harness',
     title: 'Eval Harness',
+  },
+  {
+    key: '/identity',
+    icon: <SafetyCertificateOutlined />,
+    label: 'Users & Roles',
+    title: 'Users & Roles',
   },
   {
     key: '/audit-logs',

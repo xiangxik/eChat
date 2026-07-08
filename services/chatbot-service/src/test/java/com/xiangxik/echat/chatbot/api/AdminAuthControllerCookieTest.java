@@ -4,18 +4,21 @@ import com.xiangxik.echat.chatbot.api.admin.AdminAuthController;
 import com.xiangxik.echat.chatbot.api.admin.AdminTokenVerifier;
 import com.xiangxik.echat.chatbot.api.dto.AdminLoginRequest;
 import com.xiangxik.echat.chatbot.config.ChatbotProperties;
+import com.xiangxik.echat.chatbot.service.AdminIdentityService;
 import java.util.List;
 import org.junit.jupiter.api.Test;
 import org.springframework.http.HttpHeaders;
 import org.springframework.mock.web.MockHttpServletResponse;
 
 import static org.assertj.core.api.Assertions.assertThat;
+import static org.mockito.Mockito.mock;
 
 class AdminAuthControllerCookieTest {
 
     @Test
     void secureFlagFollowsAdminCookieSecureProperty() {
-        AdminAuthController controller = new AdminAuthController(properties(true), new AdminTokenVerifier());
+        AdminAuthController controller = new AdminAuthController(properties(true), new AdminTokenVerifier(),
+            mock(AdminIdentityService.class));
         MockHttpServletResponse response = new MockHttpServletResponse();
 
         controller.login(new AdminLoginRequest("test-admin-token"), response);

@@ -4,6 +4,7 @@ import com.xiangxik.echat.chatbot.api.admin.AdminAuthController;
 import com.xiangxik.echat.chatbot.api.admin.AdminTokenInterceptor;
 import com.xiangxik.echat.chatbot.api.admin.AdminTokenVerifier;
 import com.xiangxik.echat.chatbot.config.ChatbotProperties;
+import com.xiangxik.echat.chatbot.service.AdminIdentityService;
 import jakarta.servlet.http.Cookie;
 import jakarta.servlet.http.HttpServletRequest;
 import java.util.Locale;
@@ -20,15 +21,22 @@ public class AdminPrincipalResolver {
 
     private final ChatbotProperties properties;
     private final AdminTokenVerifier adminTokenVerifier;
+    private final AdminIdentityService adminIdentityService;
 
-    public AdminPrincipalResolver(ChatbotProperties properties, AdminTokenVerifier adminTokenVerifier) {
+    public AdminPrincipalResolver(ChatbotProperties properties, AdminTokenVerifier adminTokenVerifier,
+                                  AdminIdentityService adminIdentityService) {
         this.properties = properties;
         this.adminTokenVerifier = adminTokenVerifier;
+        this.adminIdentityService = adminIdentityService;
     }
 
     public Optional<AdminPrincipal> resolve(HttpServletRequest request) {
         String headerToken = request.getHeader(AdminTokenInterceptor.ADMIN_TOKEN_HEADER);
         String cookieToken = findSessionCookie(request);
+        Optional<AdminPrincipal> userPrincipal = adminIdentityService.resolveSessionToken(cookieToken);
+        if (userPrincipal.isPresent()) {
+            return userPrincipal;
+        }
         for (ChatbotProperties.AdminPrincipalProperties principal : properties.security().adminPrincipals()) {
             if (adminTokenVerifier.matches(principal.token(), headerToken)
                     || adminTokenVerifier.matches(principal.token(), cookieToken)) {

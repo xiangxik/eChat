@@ -8,6 +8,7 @@ import { loginAdmin } from '../api/client';
 const { Text, Title } = Typography;
 
 interface LoginValues {
+  username?: string;
   password: string;
 }
 
@@ -23,7 +24,7 @@ export function LoginPage() {
   const redirectTo = state?.from?.pathname && state.from.pathname !== '/login' ? state.from.pathname : '/dashboard';
 
   const loginMutation = useMutation({
-    mutationFn: (values: LoginValues) => loginAdmin(values.password),
+    mutationFn: (values: LoginValues) => loginAdmin(values.password, values.username),
     onSuccess: async () => {
       await queryClient.invalidateQueries({ queryKey: ['admin-session'] });
       navigate(redirectTo, { replace: true });
@@ -40,6 +41,9 @@ export function LoginPage() {
         <Title level={2}>Admin Login</Title>
         <Text type="secondary">Sign in to manage providers, models, chatbots, and context policies.</Text>
         <Form className="login-form" layout="vertical" requiredMark={false} onFinish={(values) => loginMutation.mutate(values)}>
+          <Form.Item label="Username" name="username" rules={[{ max: 128 }]}>
+            <Input autoComplete="username" />
+          </Form.Item>
           <Form.Item
             label="Admin password"
             name="password"

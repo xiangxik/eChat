@@ -266,6 +266,62 @@ export interface AuditLog {
   metadata?: Record<string, unknown>;
 }
 
+export interface AdminPermission {
+  id: number;
+  code: string;
+  name: string;
+  description?: string;
+  createdAt?: string;
+  updatedAt?: string;
+}
+
+export interface AdminPermissionRequest {
+  code: string;
+  name: string;
+  description?: string;
+}
+
+export interface AdminRole {
+  id: number;
+  code: string;
+  name: string;
+  description?: string;
+  systemRole: boolean;
+  permissionIds: number[];
+  permissions: AdminPermission[];
+  createdAt?: string;
+  updatedAt?: string;
+}
+
+export interface AdminRoleRequest {
+  code: string;
+  name: string;
+  description?: string;
+  permissionIds?: number[];
+}
+
+export interface AdminUser {
+  id: number;
+  username: string;
+  displayName: string;
+  tenantId: string;
+  enabled: boolean;
+  systemUser: boolean;
+  roleIds: number[];
+  roles: AdminRole[];
+  createdAt?: string;
+  updatedAt?: string;
+}
+
+export interface AdminUserRequest {
+  username: string;
+  displayName: string;
+  password?: string;
+  tenantId: string;
+  enabled?: boolean;
+  roleIds?: number[];
+}
+
 export const providerTypes: ProviderType[] = [
   'OPENAI_COMPATIBLE',
   'ANTHROPIC',
@@ -337,4 +393,25 @@ export const adminApi = {
   listEvalResults: (id: number) => apiRequest<EvalResult[]>(`/api/admin/eval-runs/${id}/results`),
 
   listAuditLogs: () => apiRequest<AuditLog[]>('/api/admin/audit-logs'),
+
+  listAdminUsers: () => apiRequest<AdminUser[]>('/api/admin/identity/users'),
+  createAdminUser: (request: AdminUserRequest) =>
+    apiRequest<AdminUser>('/api/admin/identity/users', { method: 'POST', body: jsonBody(request) }),
+  updateAdminUser: (id: number, request: AdminUserRequest) =>
+    apiRequest<AdminUser>(`/api/admin/identity/users/${id}`, { method: 'PUT', body: jsonBody(request) }),
+  deleteAdminUser: (id: number) => apiRequest<void>(`/api/admin/identity/users/${id}`, { method: 'DELETE' }),
+
+  listAdminRoles: () => apiRequest<AdminRole[]>('/api/admin/identity/roles'),
+  createAdminRole: (request: AdminRoleRequest) =>
+    apiRequest<AdminRole>('/api/admin/identity/roles', { method: 'POST', body: jsonBody(request) }),
+  updateAdminRole: (id: number, request: AdminRoleRequest) =>
+    apiRequest<AdminRole>(`/api/admin/identity/roles/${id}`, { method: 'PUT', body: jsonBody(request) }),
+  deleteAdminRole: (id: number) => apiRequest<void>(`/api/admin/identity/roles/${id}`, { method: 'DELETE' }),
+
+  listAdminPermissions: () => apiRequest<AdminPermission[]>('/api/admin/identity/permissions'),
+  createAdminPermission: (request: AdminPermissionRequest) =>
+    apiRequest<AdminPermission>('/api/admin/identity/permissions', { method: 'POST', body: jsonBody(request) }),
+  updateAdminPermission: (id: number, request: AdminPermissionRequest) =>
+    apiRequest<AdminPermission>(`/api/admin/identity/permissions/${id}`, { method: 'PUT', body: jsonBody(request) }),
+  deleteAdminPermission: (id: number) => apiRequest<void>(`/api/admin/identity/permissions/${id}`, { method: 'DELETE' }),
 };

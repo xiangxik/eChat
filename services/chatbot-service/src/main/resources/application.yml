@@ -69,6 +69,6 @@ echat:
         display-name: ${ADMIN_DISPLAY_NAME:Local Admin}
         token: ${ADMIN_TOKEN:dev-admin-token}
         tenant-id: ${ADMIN_TENANT_ID:default}
-        roles: ${ADMIN_ROLES:ADMIN,AUDITOR}
+        roles: ${ADMIN_ROLES:SUPER_ADMIN,ADMIN,AUDITOR}
         attributes:
           source: local-config

@@ -31,6 +31,11 @@ export interface AdminSessionResponse {
   authenticated: boolean;
 }
 
+export interface AdminLoginRequest {
+  username?: string;
+  password: string;
+}
+
 export async function apiRequest<T>(path: string, options: RequestInit = {}): Promise<T> {
   const headers = new Headers(options.headers);
 
@@ -51,10 +56,11 @@ export async function apiRequest<T>(path: string, options: RequestInit = {}): Pr
   return response.json() as Promise<T>;
 }
 
-export function loginAdmin(password: string) {
+export function loginAdmin(password: string, username?: string) {
+  const request: AdminLoginRequest = username ? { username, password } : { password };
   return apiRequest<AdminSessionResponse>('/api/admin/auth/login', {
     method: 'POST',
-    body: JSON.stringify({ password }),
+    body: JSON.stringify(request),
   });
 }
 

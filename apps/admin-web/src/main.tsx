@@ -16,6 +16,7 @@ const ContextPoliciesPage = lazy(() =>
 );
 const DashboardPage = lazy(() => import('./pages/DashboardPage').then((module) => ({ default: module.DashboardPage })));
 const EvalsPage = lazy(() => import('./pages/EvalsPage').then((module) => ({ default: module.EvalsPage })));
+const IdentityPage = lazy(() => import('./pages/IdentityPage').then((module) => ({ default: module.IdentityPage })));
 const LoginPage = lazy(() => import('./pages/LoginPage').then((module) => ({ default: module.LoginPage })));
 const ModelsPage = lazy(() => import('./pages/ModelsPage').then((module) => ({ default: module.ModelsPage })));
 const ProvidersPage = lazy(() => import('./pages/ProvidersPage').then((module) => ({ default: module.ProvidersPage })));
@@ -45,6 +46,7 @@ const router = createBrowserRouter([
       { path: 'chatbots', element: lazyPage(<ChatbotsPage />) },
       { path: 'context-policies', element: lazyPage(<ContextPoliciesPage />) },
       { path: 'evals', element: lazyPage(<EvalsPage />) },
+      { path: 'identity', element: lazyPage(<IdentityPage />) },
       { path: 'audit-logs', element: lazyPage(<AuditLogsPage />) },
     ],
   },

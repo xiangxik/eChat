@@ -1,13 +1,17 @@
 package com.xiangxik.echat.chatbot.api.admin;
 
 import com.xiangxik.echat.chatbot.api.dto.AdminLoginRequest;
+import com.xiangxik.echat.chatbot.api.dto.AdminLoginResult;
 import com.xiangxik.echat.chatbot.api.dto.AdminSessionResponse;
 import com.xiangxik.echat.chatbot.config.ChatbotProperties;
+import com.xiangxik.echat.chatbot.service.AdminIdentityService;
 import io.swagger.v3.oas.annotations.Operation;
 import io.swagger.v3.oas.annotations.tags.Tag;
+import jakarta.servlet.http.HttpServletRequest;
 import jakarta.servlet.http.HttpServletResponse;
 import jakarta.validation.Valid;
 import java.time.Duration;
+import java.util.Optional;
 import org.springframework.http.HttpHeaders;
 import org.springframework.http.ResponseCookie;
 import org.springframework.http.HttpStatus;
@@ -30,16 +34,24 @@ public class AdminAuthController {
 
     private final ChatbotProperties properties;
     private final AdminTokenVerifier adminTokenVerifier;
+    private final AdminIdentityService adminIdentityService;
 
-    public AdminAuthController(ChatbotProperties properties, AdminTokenVerifier adminTokenVerifier) {
+    public AdminAuthController(ChatbotProperties properties, AdminTokenVerifier adminTokenVerifier,
+                               AdminIdentityService adminIdentityService) {
         this.properties = properties;
         this.adminTokenVerifier = adminTokenVerifier;
+        this.adminIdentityService = adminIdentityService;
     }
 
     @PostMapping("/login")
     @Operation(summary = "Start an admin session")
     public AdminSessionResponse login(@Valid @RequestBody AdminLoginRequest request, HttpServletResponse response) {
         String password = request.password().trim();
+        Optional<AdminLoginResult> userLogin = adminIdentityService.authenticate(request.username(), password);
+        if (userLogin.isPresent()) {
+            response.addHeader(HttpHeaders.SET_COOKIE, sessionCookie(userLogin.get().sessionToken(), SESSION_MAX_AGE).toString());
+            return new AdminSessionResponse(true);
+        }
         if (!adminTokenVerifier.matches(properties.security().adminToken(), password)) {
             throw new ResponseStatusException(HttpStatus.UNAUTHORIZED, "Missing or invalid admin credentials");
         }
@@ -51,7 +63,8 @@ public class AdminAuthController {
     @PostMapping("/logout")
     @ResponseStatus(HttpStatus.NO_CONTENT)
     @Operation(summary = "End the current admin session")
-    public void logout(HttpServletResponse response) {
+    public void logout(HttpServletRequest request, HttpServletResponse response) {
+        adminIdentityService.logout(findSessionCookie(request));
         response.addHeader(HttpHeaders.SET_COOKIE, sessionCookie("", Duration.ZERO).toString());
     }
 
@@ -64,10 +77,22 @@ public class AdminAuthController {
     private ResponseCookie sessionCookie(String value, Duration maxAge) {
         return ResponseCookie.from(ADMIN_SESSION_COOKIE, value)
                 .httpOnly(true)
-            .secure(properties.security().adminCookieSecure())
+                .secure(properties.security().adminCookieSecure())
                 .sameSite("Lax")
                 .path("/")
                 .maxAge(maxAge)
                 .build();
+    }
+
+    private String findSessionCookie(HttpServletRequest request) {
+        if (request.getCookies() == null) {
+            return null;
+        }
+        for (jakarta.servlet.http.Cookie cookie : request.getCookies()) {
+            if (ADMIN_SESSION_COOKIE.equals(cookie.getName())) {
+                return cookie.getValue();
+            }
+        }
+        return null;
     }
 }
