@@ -2,11 +2,9 @@ package com.xiangxik.echat.chatbot.config;
 
 import com.xiangxik.echat.chatbot.domain.model.AdminRole;
 import com.xiangxik.echat.chatbot.domain.model.AdminUser;
-import com.xiangxik.echat.chatbot.domain.model.ProviderConfig;
-import com.xiangxik.echat.chatbot.domain.model.ProviderType;
 import com.xiangxik.echat.chatbot.domain.repository.AdminRoleRepository;
 import com.xiangxik.echat.chatbot.domain.repository.AdminUserRepository;
-import com.xiangxik.echat.chatbot.domain.repository.ProviderConfigRepository;
+import com.xiangxik.echat.chatbot.service.TenantService;
 import java.util.LinkedHashSet;
 import java.util.List;
 import org.springframework.boot.ApplicationArguments;
@@ -21,21 +19,21 @@ public class DefaultDataInitializer implements ApplicationRunner {
     private static final String DEFAULT_ADMIN_USERNAME = "admin";
 
     private final ChatbotProperties properties;
-    private final ProviderConfigRepository providerConfigRepository;
     private final AdminUserRepository adminUserRepository;
     private final AdminRoleRepository adminRoleRepository;
     private final PasswordEncoder passwordEncoder;
+    private final TenantService tenantService;
 
     public DefaultDataInitializer(ChatbotProperties properties,
-                                  ProviderConfigRepository providerConfigRepository,
                                   AdminUserRepository adminUserRepository,
                                   AdminRoleRepository adminRoleRepository,
-                                  PasswordEncoder passwordEncoder) {
+                                  PasswordEncoder passwordEncoder,
+                                  TenantService tenantService) {
         this.properties = properties;
-        this.providerConfigRepository = providerConfigRepository;
         this.adminUserRepository = adminUserRepository;
         this.adminRoleRepository = adminRoleRepository;
         this.passwordEncoder = passwordEncoder;
+        this.tenantService = tenantService;
     }
 
     @Override
@@ -44,22 +42,12 @@ public class DefaultDataInitializer implements ApplicationRunner {
     }
 
     public void initializeDefaults() {
-        seedProviders();
+        String tenantId = resolveTenantId(configuredAdminPrincipal());
+        tenantService.ensureTenant(TenantService.DEFAULT_TENANT_ID, "Default Tenant");
+        tenantService.ensureTenant(tenantId, tenantId);
+        tenantService.seedTenantProviders(TenantService.DEFAULT_TENANT_ID);
+        tenantService.seedTenantProviders(tenantId);
         seedSystemAdmin();
-    }
-
-    private void seedProviders() {
-        for (ChatbotProperties.ProviderSeedProperties seed : properties.bootstrap().providers()) {
-            if (providerConfigRepository.findByName(seed.name()).isPresent()) {
-                continue;
-            }
-            ProviderConfig provider = new ProviderConfig();
-            provider.setName(seed.name());
-            provider.setType(ProviderType.valueOf(seed.type().name()));
-            provider.setBaseUrl(seed.baseUrl());
-            provider.setEnabled(false);
-            providerConfigRepository.save(provider);
-        }
     }
 
     private void seedSystemAdmin() {

@@ -18,6 +18,9 @@ import org.hibernate.type.SqlTypes;
 @Table(name = "eval_runs")
 public class EvalRun extends BaseEntity {
 
+    @Column(name = "tenant_id", nullable = false, length = 160)
+    private String tenantId = "default";
+
     @ManyToOne(fetch = FetchType.LAZY, optional = false)
     @JoinColumn(name = "dataset_id", nullable = false)
     private EvalDataset dataset;
@@ -39,6 +42,14 @@ public class EvalRun extends BaseEntity {
 
     @Column(name = "finished_at")
     private Instant finishedAt;
+
+    public String getTenantId() {
+        return tenantId;
+    }
+
+    public void setTenantId(String tenantId) {
+        this.tenantId = tenantId;
+    }
 
     @JdbcTypeCode(SqlTypes.JSON)
     @Column(name = "summary", nullable = false, columnDefinition = "jsonb")

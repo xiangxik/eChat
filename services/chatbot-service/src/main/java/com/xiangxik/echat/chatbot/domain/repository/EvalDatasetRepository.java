@@ -6,5 +6,7 @@ import org.springframework.data.jpa.repository.JpaRepository;
 
 public interface EvalDatasetRepository extends JpaRepository<EvalDataset, Long> {
 
-    List<EvalDataset> findAllByOrderByUpdatedAtDesc();
+    List<EvalDataset> findByTenantIdOrderByUpdatedAtDesc(String tenantId);
+
+    java.util.Optional<EvalDataset> findByTenantIdAndId(String tenantId, Long id);
 }

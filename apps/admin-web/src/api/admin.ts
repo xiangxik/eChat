@@ -1,10 +1,20 @@
 import { apiRequest } from './client';
 
+export type AdminListValue = string | number | boolean | null | undefined;
+
+export interface AdminListQuery {
+  search?: string;
+  sortField?: string;
+  sortOrder?: 'ascend' | 'descend' | null;
+  [key: string]: AdminListValue | 'ascend' | 'descend' | null;
+}
+
 export type ProviderType = 'OPENAI_COMPATIBLE' | 'ANTHROPIC' | 'AZURE_OPENAI' | 'GEMINI' | 'OLLAMA' | 'CUSTOM';
 export type ModelType = 'CHAT' | 'EMBEDDING' | 'RERANKER';
 
 export interface ProviderConfig {
   id: number;
+  tenantId: string;
   name: string;
   type: ProviderType;
   baseUrl?: string;
@@ -33,6 +43,7 @@ export interface ProviderConnectionTestResult {
 
 export interface ModelConfig {
   id: number;
+  tenantId: string;
   providerId: number;
   providerName: string;
   displayName: string;
@@ -80,6 +91,7 @@ export interface ModelOption {
 
 export interface ChatbotConfig {
   id: number;
+  tenantId: string;
   name: string;
   description?: string;
   enabled: boolean;
@@ -332,6 +344,21 @@ export interface AdminUserRequest {
   roleIds?: number[];
 }
 
+export interface Tenant {
+  id: number;
+  tenantId: string;
+  name: string;
+  enabled: boolean;
+  createdAt?: string;
+  updatedAt?: string;
+}
+
+export interface TenantRequest {
+  tenantId: string;
+  name: string;
+  enabled?: boolean;
+}
+
 export const providerTypes: ProviderType[] = [
   'OPENAI_COMPATIBLE',
   'ANTHROPIC',
@@ -347,8 +374,26 @@ function jsonBody(value: unknown) {
   return JSON.stringify(value);
 }
 
+function queryPath(path: string, query?: unknown) {
+  if (!isAdminListQuery(query)) {
+    return path;
+  }
+  const params = new URLSearchParams();
+  Object.entries(query).forEach(([key, value]) => {
+    if (value !== undefined && value !== null && value !== '') {
+      params.set(key, String(value));
+    }
+  });
+  const queryString = params.toString();
+  return queryString ? `${path}?${queryString}` : path;
+}
+
+function isAdminListQuery(query: unknown): query is AdminListQuery {
+  return query !== null && typeof query === 'object' && !('queryKey' in query);
+}
+
 export const adminApi = {
-  listProviders: () => apiRequest<ProviderConfig[]>('/api/admin/providers'),
+  listProviders: (query?: unknown) => apiRequest<ProviderConfig[]>(queryPath('/api/admin/providers', query)),
   createProvider: (request: ProviderConfigRequest) =>
     apiRequest<ProviderConfig>('/api/admin/providers', { method: 'POST', body: jsonBody(request) }),
   updateProvider: (id: number, request: ProviderConfigRequest) =>
@@ -357,7 +402,7 @@ export const adminApi = {
   testProviderConnection: (id: number) =>
     apiRequest<ProviderConnectionTestResult>(`/api/admin/providers/${id}/test-connection`, { method: 'POST' }),
 
-  listModels: () => apiRequest<ModelConfig[]>('/api/admin/models'),
+  listModels: (query?: unknown) => apiRequest<ModelConfig[]>(queryPath('/api/admin/models', query)),
   listModelOptions: (providerId: number) => apiRequest<ModelOption[]>(`/api/admin/models/options?providerId=${providerId}`),
   createModel: (request: ModelConfigRequest) =>
     apiRequest<ModelConfig>('/api/admin/models', { method: 'POST', body: jsonBody(request) }),
@@ -367,7 +412,7 @@ export const adminApi = {
   testModelGeneration: (id: number) =>
     apiRequest<ModelGenerationTestResult>(`/api/admin/models/${id}/test-generation`, { method: 'POST' }),
 
-  listChatbots: () => apiRequest<ChatbotConfig[]>('/api/admin/chatbots'),
+  listChatbots: (query?: unknown) => apiRequest<ChatbotConfig[]>(queryPath('/api/admin/chatbots', query)),
   getChatbot: (id: number) => apiRequest<ChatbotConfig>(`/api/admin/chatbots/${id}`),
   createChatbot: (request: ChatbotConfigRequest) =>
     apiRequest<ChatbotConfig>('/api/admin/chatbots', { method: 'POST', body: jsonBody(request) }),
@@ -387,34 +432,38 @@ export const adminApi = {
   sendChatMessage: (conversationId: number, request: ChatMessageRequest) =>
     apiRequest<ChatRuntimeResponse>(`/api/chat/conversations/${conversationId}/messages`, { method: 'POST', body: jsonBody(request) }),
 
-  listEvalDatasets: () => apiRequest<EvalDataset[]>('/api/admin/eval-datasets'),
+  listEvalDatasets: (query?: unknown) => apiRequest<EvalDataset[]>(queryPath('/api/admin/eval-datasets', query)),
   createEvalDataset: (request: EvalDatasetRequest) =>
     apiRequest<EvalDataset>('/api/admin/eval-datasets', { method: 'POST', body: jsonBody(request) }),
-  listEvalCases: (datasetId: number) => apiRequest<EvalCase[]>(`/api/admin/eval-datasets/${datasetId}/cases`),
+  listEvalCases: (datasetId: number, query?: unknown) => apiRequest<EvalCase[]>(queryPath(`/api/admin/eval-datasets/${datasetId}/cases`, query)),
   createEvalCase: (datasetId: number, request: EvalCaseRequest) =>
     apiRequest<EvalCase>(`/api/admin/eval-datasets/${datasetId}/cases`, { method: 'POST', body: jsonBody(request) }),
   createEvalRun: (request: EvalRunRequest) =>
     apiRequest<EvalRun>('/api/admin/eval-runs', { method: 'POST', body: jsonBody(request) }),
   getEvalRun: (id: number) => apiRequest<EvalRun>(`/api/admin/eval-runs/${id}`),
-  listEvalResults: (id: number) => apiRequest<EvalResult[]>(`/api/admin/eval-runs/${id}/results`),
+  listEvalResults: (id: number, query?: unknown) => apiRequest<EvalResult[]>(queryPath(`/api/admin/eval-runs/${id}/results`, query)),
 
-  listAuditLogs: () => apiRequest<AuditLog[]>('/api/admin/audit-logs'),
+  listAuditLogs: (query?: unknown) => apiRequest<AuditLog[]>(queryPath('/api/admin/audit-logs', query)),
 
-  listAdminUsers: () => apiRequest<AdminUser[]>('/api/admin/identity/users'),
+  listTenants: (query?: unknown) => apiRequest<Tenant[]>(queryPath('/api/admin/tenants', query)),
+  createTenant: (request: TenantRequest) =>
+    apiRequest<Tenant>('/api/admin/tenants', { method: 'POST', body: jsonBody(request) }),
+
+  listAdminUsers: (query?: unknown) => apiRequest<AdminUser[]>(queryPath('/api/admin/identity/users', query)),
   createAdminUser: (request: AdminUserRequest) =>
     apiRequest<AdminUser>('/api/admin/identity/users', { method: 'POST', body: jsonBody(request) }),
   updateAdminUser: (id: number, request: AdminUserRequest) =>
     apiRequest<AdminUser>(`/api/admin/identity/users/${id}`, { method: 'PUT', body: jsonBody(request) }),
   deleteAdminUser: (id: number) => apiRequest<void>(`/api/admin/identity/users/${id}`, { method: 'DELETE' }),
 
-  listAdminRoles: () => apiRequest<AdminRole[]>('/api/admin/identity/roles'),
+  listAdminRoles: (query?: unknown) => apiRequest<AdminRole[]>(queryPath('/api/admin/identity/roles', query)),
   createAdminRole: (request: AdminRoleRequest) =>
     apiRequest<AdminRole>('/api/admin/identity/roles', { method: 'POST', body: jsonBody(request) }),
   updateAdminRole: (id: number, request: AdminRoleRequest) =>
     apiRequest<AdminRole>(`/api/admin/identity/roles/${id}`, { method: 'PUT', body: jsonBody(request) }),
   deleteAdminRole: (id: number) => apiRequest<void>(`/api/admin/identity/roles/${id}`, { method: 'DELETE' }),
 
-  listAdminPermissions: () => apiRequest<AdminPermission[]>('/api/admin/identity/permissions'),
+  listAdminPermissions: (query?: unknown) => apiRequest<AdminPermission[]>(queryPath('/api/admin/identity/permissions', query)),
   createAdminPermission: (request: AdminPermissionRequest) =>
     apiRequest<AdminPermission>('/api/admin/identity/permissions', { method: 'POST', body: jsonBody(request) }),
   updateAdminPermission: (id: number, request: AdminPermissionRequest) =>

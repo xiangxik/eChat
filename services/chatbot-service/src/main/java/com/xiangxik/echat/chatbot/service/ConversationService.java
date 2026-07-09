@@ -27,23 +27,25 @@ public class ConversationService {
     }
 
     @Transactional(readOnly = true)
-    public Conversation get(Long id) {
-        return find(id);
+    public Conversation get(Long id, String tenantId) {
+        return find(id, tenantId);
     }
 
     @Transactional(readOnly = true)
-    public List<Conversation> listActiveByChatbot(Long chatbotId) {
-        return conversationRepository.findByChatbotIdAndStatusOrderByUpdatedAtDesc(chatbotId, ConversationStatus.ACTIVE);
+    public List<Conversation> listActiveByChatbot(String tenantId, Long chatbotId) {
+        return conversationRepository.findByTenantIdAndChatbotIdAndStatusOrderByUpdatedAtDesc(tenantId, chatbotId,
+                ConversationStatus.ACTIVE);
     }
 
     @Transactional
-    public Conversation create(Long chatbotId, String userId, String anonymousSessionId, String title) {
-        ChatbotConfig chatbot = chatbotConfigRepository.findById(chatbotId)
+    public Conversation create(String tenantId, Long chatbotId, String userId, String anonymousSessionId, String title) {
+        ChatbotConfig chatbot = chatbotConfigRepository.findByTenantIdAndId(tenantId, chatbotId)
                 .orElseThrow(() -> new ResourceNotFoundException("ChatbotConfig", chatbotId));
         if (!chatbot.isEnabled()) {
             throw new IllegalArgumentException("Chatbot is disabled");
         }
         Conversation conversation = new Conversation();
+        conversation.setTenantId(tenantId);
         conversation.setChatbot(chatbot);
         conversation.setUserId(userId);
         conversation.setAnonymousSessionId(anonymousSessionId);
@@ -56,19 +58,19 @@ public class ConversationService {
     }
 
     @Transactional
-    public Conversation updateStatus(Long id, ConversationStatus status) {
-        Conversation conversation = find(id);
+    public Conversation updateStatus(String tenantId, Long id, ConversationStatus status) {
+        Conversation conversation = find(id, tenantId);
         conversation.setStatus(status);
         return conversationRepository.save(conversation);
     }
 
     @Transactional
-    public void delete(Long id) {
-        conversationRepository.delete(find(id));
+    public void delete(String tenantId, Long id) {
+        conversationRepository.delete(find(id, tenantId));
     }
 
-    private Conversation find(Long id) {
-        return conversationRepository.findByIdWithChatbotAndWorkflowNode(id)
+    private Conversation find(Long id, String tenantId) {
+        return conversationRepository.findByTenantIdAndIdWithChatbotAndWorkflowNode(tenantId, id)
                 .orElseThrow(() -> new ResourceNotFoundException("Conversation", id));
     }
 }

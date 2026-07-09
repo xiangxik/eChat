@@ -50,6 +50,7 @@ class EvalAdminControllerTest extends PostgresIntegrationTest {
 
     private static final String ADMIN_TOKEN = "test-admin-token";
     private static final String API_KEY = "sk-eval-secret";
+    private static final String TENANT_ID = "tenant-a";
 
     private final ObjectMapper objectMapper = new ObjectMapper();
     private MockMvc mockMvc;
@@ -203,6 +204,7 @@ class EvalAdminControllerTest extends PostgresIntegrationTest {
     private Long createConfiguredChatbot() {
         String suffix = UUID.randomUUID().toString();
         ProviderConfig provider = new ProviderConfig();
+        provider.setTenantId(TENANT_ID);
         provider.setName("Eval OpenAI " + suffix);
         provider.setType(ProviderType.OPENAI_COMPATIBLE);
         provider.setBaseUrl("http://localhost:8081/v1");
@@ -221,6 +223,7 @@ class EvalAdminControllerTest extends PostgresIntegrationTest {
         model = modelConfigRepository.saveAndFlush(model);
 
         ChatbotConfig chatbot = new ChatbotConfig();
+        chatbot.setTenantId(TENANT_ID);
         chatbot.setName("Eval bot " + suffix);
         chatbot.setEnabled(true);
         chatbot = chatbotConfigRepository.saveAndFlush(chatbot);

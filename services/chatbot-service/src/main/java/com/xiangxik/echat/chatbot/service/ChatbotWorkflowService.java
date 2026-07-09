@@ -50,6 +50,7 @@ public class ChatbotWorkflowService {
     private final ContextPolicyValidator contextPolicyValidator;
     private final WorkflowTransitionEvaluator transitionEvaluator;
     private final AuditLogService auditLogService;
+    private final TenantService tenantService;
 
     public ChatbotWorkflowService(ChatbotConfigRepository chatbotConfigRepository,
                                   ChatbotWorkflowNodeRepository nodeRepository,
@@ -57,7 +58,8 @@ public class ChatbotWorkflowService {
                                   ModelConfigRepository modelConfigRepository,
                                   ContextPolicyValidator contextPolicyValidator,
                                   WorkflowTransitionEvaluator transitionEvaluator,
-                                  AuditLogService auditLogService) {
+                                  AuditLogService auditLogService,
+                                  TenantService tenantService) {
         this.chatbotConfigRepository = chatbotConfigRepository;
         this.nodeRepository = nodeRepository;
         this.transitionRepository = transitionRepository;
@@ -65,6 +67,7 @@ public class ChatbotWorkflowService {
         this.contextPolicyValidator = contextPolicyValidator;
         this.transitionEvaluator = transitionEvaluator;
         this.auditLogService = auditLogService;
+        this.tenantService = tenantService;
     }
 
     @Transactional(readOnly = true)
@@ -95,11 +98,12 @@ public class ChatbotWorkflowService {
         List<ChatbotWorkflowTransition> existingTransitions = transitionRepository.findByChatbotIdOrderByFromNodeNodeKeyAscPriorityAscIdAsc(chatbotId);
         transitionRepository.deleteAll(existingTransitions);
 
-        Map<Long, ModelConfig> models = modelConfigRepository.findAllById(normalizedRequest.nodes().stream()
+        Map<Long, ModelConfig> models = modelConfigRepository.findByProviderTenantIdOrderByDisplayNameAsc(
+                        tenantService.currentTenantId()).stream()
+                .filter(model -> normalizedRequest.nodes().stream()
             .map(ChatbotWorkflowNodeRequest::modelId)
                 .filter(Objects::nonNull)
-                .collect(Collectors.toSet()))
-                .stream()
+                        .collect(Collectors.toSet()).contains(model.getId()))
             .collect(Collectors.toMap(ModelConfig::getId, Function.identity()));
 
         Map<String, ChatbotWorkflowNode> savedNodes = new LinkedHashMap<>();
@@ -165,11 +169,12 @@ public class ChatbotWorkflowService {
 
         Map<String, ChatbotWorkflowNodeRequest> nodesByKey = new LinkedHashMap<>();
         int enabledStartCount = 0;
-        Map<Long, ModelConfig> models = modelConfigRepository.findAllById(nodes.stream()
+        Map<Long, ModelConfig> models = modelConfigRepository.findByProviderTenantIdOrderByDisplayNameAsc(
+                        tenantService.currentTenantId()).stream()
+                .filter(model -> nodes.stream()
             .map(ChatbotWorkflowNodeRequest::modelId)
                 .filter(Objects::nonNull)
-                .collect(Collectors.toSet()))
-                .stream()
+                        .collect(Collectors.toSet()).contains(model.getId()))
             .collect(Collectors.toMap(ModelConfig::getId, Function.identity()));
         for (ChatbotWorkflowNodeRequest node : nodes) {
             String nodeKey = normalizeKey(node.nodeKey());
@@ -254,7 +259,7 @@ public class ChatbotWorkflowService {
     }
 
     private ChatbotConfig findChatbot(Long chatbotId) {
-        return chatbotConfigRepository.findById(chatbotId)
+        return chatbotConfigRepository.findByTenantIdAndId(tenantService.currentTenantId(), chatbotId)
                 .orElseThrow(() -> new ResourceNotFoundException("ChatbotConfig", chatbotId));
     }
 

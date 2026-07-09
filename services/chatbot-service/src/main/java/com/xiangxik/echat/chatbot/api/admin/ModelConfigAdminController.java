@@ -4,11 +4,13 @@ import com.xiangxik.echat.chatbot.api.dto.ModelConfigRequest;
 import com.xiangxik.echat.chatbot.api.dto.ModelConfigResponse;
 import com.xiangxik.echat.chatbot.api.dto.ModelGenerationTestResponse;
 import com.xiangxik.echat.chatbot.api.dto.ModelOptionResponse;
+import com.xiangxik.echat.chatbot.service.AdminListQuery;
 import com.xiangxik.echat.chatbot.service.ModelConfigService;
 import io.swagger.v3.oas.annotations.Operation;
 import io.swagger.v3.oas.annotations.tags.Tag;
 import jakarta.validation.Valid;
 import java.util.List;
+import java.util.Map;
 import org.springframework.http.HttpStatus;
 import org.springframework.web.bind.annotation.DeleteMapping;
 import org.springframework.web.bind.annotation.GetMapping;
@@ -34,8 +36,8 @@ public class ModelConfigAdminController {
 
     @GetMapping
     @Operation(summary = "List model configurations")
-    public List<ModelConfigResponse> list() {
-        return modelConfigService.list();
+    public List<ModelConfigResponse> list(@RequestParam Map<String, String> params) {
+        return modelConfigService.list(AdminListQuery.from(params));
     }
 
     @GetMapping("/{id}")

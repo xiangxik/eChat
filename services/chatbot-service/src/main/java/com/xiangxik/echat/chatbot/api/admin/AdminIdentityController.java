@@ -6,11 +6,13 @@ import com.xiangxik.echat.chatbot.api.dto.AdminRoleRequest;
 import com.xiangxik.echat.chatbot.api.dto.AdminRoleResponse;
 import com.xiangxik.echat.chatbot.api.dto.AdminUserRequest;
 import com.xiangxik.echat.chatbot.api.dto.AdminUserResponse;
+import com.xiangxik.echat.chatbot.service.AdminListQuery;
 import com.xiangxik.echat.chatbot.service.AdminIdentityService;
 import io.swagger.v3.oas.annotations.Operation;
 import io.swagger.v3.oas.annotations.tags.Tag;
 import jakarta.validation.Valid;
 import java.util.List;
+import java.util.Map;
 import org.springframework.http.HttpStatus;
 import org.springframework.web.bind.annotation.DeleteMapping;
 import org.springframework.web.bind.annotation.GetMapping;
@@ -19,6 +21,7 @@ import org.springframework.web.bind.annotation.PostMapping;
 import org.springframework.web.bind.annotation.PutMapping;
 import org.springframework.web.bind.annotation.RequestBody;
 import org.springframework.web.bind.annotation.RequestMapping;
+import org.springframework.web.bind.annotation.RequestParam;
 import org.springframework.web.bind.annotation.ResponseStatus;
 import org.springframework.web.bind.annotation.RestController;
 
@@ -35,8 +38,8 @@ public class AdminIdentityController {
 
     @GetMapping("/users")
     @Operation(summary = "List admin users")
-    public List<AdminUserResponse> listUsers() {
-        return adminIdentityService.listUsers();
+    public List<AdminUserResponse> listUsers(@RequestParam Map<String, String> params) {
+        return adminIdentityService.listUsers(AdminListQuery.from(params));
     }
 
     @PostMapping("/users")
@@ -61,8 +64,8 @@ public class AdminIdentityController {
 
     @GetMapping("/roles")
     @Operation(summary = "List admin roles")
-    public List<AdminRoleResponse> listRoles() {
-        return adminIdentityService.listRoles();
+    public List<AdminRoleResponse> listRoles(@RequestParam Map<String, String> params) {
+        return adminIdentityService.listRoles(AdminListQuery.from(params));
     }
 
     @PostMapping("/roles")
@@ -87,8 +90,8 @@ public class AdminIdentityController {
 
     @GetMapping("/permissions")
     @Operation(summary = "List admin permissions")
-    public List<AdminPermissionResponse> listPermissions() {
-        return adminIdentityService.listPermissions();
+    public List<AdminPermissionResponse> listPermissions(@RequestParam Map<String, String> params) {
+        return adminIdentityService.listPermissions(AdminListQuery.from(params));
     }
 
     @PostMapping("/permissions")

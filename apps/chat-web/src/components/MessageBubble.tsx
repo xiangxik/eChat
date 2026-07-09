@@ -13,7 +13,7 @@ interface MessageBubbleProps {
 
 export function MessageBubble({ message, locale, copy }: MessageBubbleProps) {
   const isAssistant = message.role === 'ASSISTANT';
-  const messageTime = formatMessageTime(message.createdAt, locale);
+  const messageTime = formatMessageTime(message.createdAt);
 
   return (
     <article className={`message-row ${isAssistant ? 'message-row-assistant' : 'message-row-user'}`}>
@@ -55,7 +55,11 @@ export function MessageBubble({ message, locale, copy }: MessageBubbleProps) {
   );
 }
 
-function formatMessageTime(createdAt: string | undefined, locale: Locale) {
+function padDatePart(value: number) {
+  return String(value).padStart(2, '0');
+}
+
+function formatMessageTime(createdAt: string | undefined) {
   if (!createdAt) {
     return '';
   }
@@ -65,8 +69,13 @@ function formatMessageTime(createdAt: string | undefined, locale: Locale) {
     return '';
   }
 
-  return new Intl.DateTimeFormat(locale === 'zh' ? 'zh-CN' : 'en', {
-    hour: '2-digit',
-    minute: '2-digit',
-  }).format(date);
+  return [
+    date.getFullYear(),
+    padDatePart(date.getMonth() + 1),
+    padDatePart(date.getDate()),
+  ].join('-') + ` ${[
+    padDatePart(date.getHours()),
+    padDatePart(date.getMinutes()),
+    padDatePart(date.getSeconds()),
+  ].join(':')}`;
 }

@@ -7,7 +7,11 @@ import org.springframework.data.jpa.repository.JpaRepository;
 
 public interface ChatbotConfigRepository extends JpaRepository<ChatbotConfig, Long> {
 
-    Optional<ChatbotConfig> findByName(String name);
+    Optional<ChatbotConfig> findByTenantIdAndId(String tenantId, Long id);
 
-    List<ChatbotConfig> findByEnabledTrueOrderByNameAsc();
+    Optional<ChatbotConfig> findByTenantIdAndName(String tenantId, String name);
+
+    List<ChatbotConfig> findByTenantIdOrderByNameAsc(String tenantId);
+
+    List<ChatbotConfig> findByTenantIdAndEnabledTrueOrderByNameAsc(String tenantId);
 }

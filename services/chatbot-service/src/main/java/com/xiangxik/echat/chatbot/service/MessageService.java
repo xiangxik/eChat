@@ -22,14 +22,14 @@ public class MessageService {
     }
 
     @Transactional(readOnly = true)
-    public List<Message> listByConversation(Long conversationId) {
-        return messageRepository.findByConversationIdOrderByCreatedAtAsc(conversationId);
+    public List<Message> listByConversation(String tenantId, Long conversationId) {
+        return messageRepository.findByConversationTenantIdAndConversationIdOrderByCreatedAtAsc(tenantId, conversationId);
     }
 
     @Transactional
-    public Message create(Long conversationId, MessageRole role, String content, Integer tokenCount,
+    public Message create(String tenantId, Long conversationId, MessageRole role, String content, Integer tokenCount,
                           Map<String, Object> metadata) {
-        Conversation conversation = conversationRepository.findById(conversationId)
+        Conversation conversation = conversationRepository.findByTenantIdAndIdWithChatbotAndWorkflowNode(tenantId, conversationId)
                 .orElseThrow(() -> new ResourceNotFoundException("Conversation", conversationId));
         Message message = new Message();
         message.setConversation(conversation);

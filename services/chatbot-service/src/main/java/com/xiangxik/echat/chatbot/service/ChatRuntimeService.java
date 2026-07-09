@@ -138,12 +138,12 @@ public class ChatRuntimeService {
         if (!StringUtils.hasText(request.userId()) && !StringUtils.hasText(request.anonymousSessionId())) {
             throw new IllegalArgumentException("Either userId or anonymousSessionId is required");
         }
-        Conversation conversation = conversationService.create(request.chatbotId(), request.userId(),
+        Conversation conversation = conversationService.create(context.tenantId(), request.chatbotId(), request.userId(),
                 request.anonymousSessionId(), request.title());
         log.info("audit.chat.conversation.created requestId={} traceId={} conversationId={} chatbotId={} userIdPresent={} remoteAddress={}",
                 context.requestId(), context.traceId(), conversation.getId(), request.chatbotId(),
                 StringUtils.hasText(request.userId()), context.remoteAddress());
-        auditLogService.recordRuntime("CHAT_CONVERSATION_CREATED", "Conversation", conversation.getId(),
+        auditLogService.recordRuntime(context.tenantId(), "CHAT_CONVERSATION_CREATED", "Conversation", conversation.getId(),
             context.requestId(), context.traceId(), context.remoteAddress(),
             Map.of("chatbotId", request.chatbotId(), "userIdPresent", StringUtils.hasText(request.userId())));
         if (!metadata.isEmpty()) {
@@ -159,13 +159,15 @@ public class ChatRuntimeService {
                 context.traceId());
     }
 
-    public ChatConversationResponse getConversation(Long id) {
-        return toConversationResponse(conversationService.get(id));
+    public ChatConversationResponse getConversation(Long id, RuntimeRequestContext context) {
+        return toConversationResponse(conversationService.get(id, context.tenantId()));
     }
 
-    public List<ChatMessageResponse> listMessages(Long conversationId) {
-        conversationService.get(conversationId);
-        return messageService.listByConversation(conversationId).stream().map(this::toMessageResponse).toList();
+    public List<ChatMessageResponse> listMessages(Long conversationId, RuntimeRequestContext context) {
+        conversationService.get(conversationId, context.tenantId());
+        return messageService.listByConversation(context.tenantId(), conversationId).stream()
+                .map(this::toMessageResponse)
+                .toList();
     }
 
     public ChatRuntimeResponse sendMessage(Long conversationId, ChatMessageRequest request,
@@ -196,7 +198,7 @@ public class ChatRuntimeService {
                     assistantMessage.getId(), assistantMessage.getTokenCount());
             recordLlmMetrics(invocation, Duration.between(llmStartedAt, Instant.now()), "success",
                     assistantMessage.getTokenCount());
-            auditLogService.recordRuntime("CHAT_MESSAGE_COMPLETED", "Conversation", conversationId,
+                auditLogService.recordRuntime(context.tenantId(), "CHAT_MESSAGE_COMPLETED", "Conversation", conversationId,
                     context.requestId(), context.traceId(), context.remoteAddress(),
                     Map.of("userMessageId", invocation.userMessage().getId(), "assistantMessageId", assistantMessage.getId(),
                             "estimatedTokens", assistantMessage.getTokenCount()));
@@ -207,7 +209,7 @@ public class ChatRuntimeService {
             log.warn("audit.chat.message.failed requestId={} traceId={} conversationId={} reason={}",
                     context.requestId(), context.traceId(), conversationId, ex.getMessage());
             recordLlmMetrics(invocation, Duration.between(llmStartedAt, Instant.now()), "error", 0);
-            auditLogService.recordRuntime("CHAT_MESSAGE_FAILED", "Conversation", conversationId,
+                auditLogService.recordRuntime(context.tenantId(), "CHAT_MESSAGE_FAILED", "Conversation", conversationId,
                     context.requestId(), context.traceId(), context.remoteAddress(), Map.of("errorType", ex.getClass().getSimpleName()));
             throw ex;
         }
@@ -281,7 +283,7 @@ public class ChatRuntimeService {
             log.info("audit.chat.stream.completed requestId={} traceId={} conversationId={} userMessageId={} assistantMessageId={} tokens={}",
                     context.requestId(), context.traceId(), conversationId, invocation.userMessage().getId(),
                     assistantMessage.getId(), assistantMessage.getTokenCount());
-            auditLogService.recordRuntime("CHAT_STREAM_COMPLETED", "Conversation", conversationId,
+                auditLogService.recordRuntime(context.tenantId(), "CHAT_STREAM_COMPLETED", "Conversation", conversationId,
                     context.requestId(), context.traceId(), context.remoteAddress(),
                     Map.of("userMessageId", invocation.userMessage().getId(), "assistantMessageId", assistantMessage.getId(),
                             "estimatedTokens", assistantMessage.getTokenCount()));
@@ -290,7 +292,7 @@ public class ChatRuntimeService {
             sessionStateCache.recordStreamState(context.requestId(), "failed");
             log.warn("audit.chat.stream.failed requestId={} traceId={} conversationId={} reason={}",
                     context.requestId(), context.traceId(), conversationId, ex.getMessage());
-            auditLogService.recordRuntime("CHAT_STREAM_FAILED", "Conversation", conversationId,
+                auditLogService.recordRuntime(context.tenantId(), "CHAT_STREAM_FAILED", "Conversation", conversationId,
                     context.requestId(), context.traceId(), context.remoteAddress(), Map.of("errorType", ex.getClass().getSimpleName()));
             try {
                 send(emitter, "error", new ChatStreamEventResponse("error", context.requestId(), context.traceId(),
@@ -308,12 +310,12 @@ public class ChatRuntimeService {
         String message = validateMessage(request.message());
         Map<String, Object> metadata = sanitizeMetadata(request.metadata());
         return transactionTemplate.execute(status -> {
-            Conversation conversation = conversationService.get(conversationId);
+            Conversation conversation = conversationService.get(conversationId, context.tenantId());
             ChatbotConfig chatbot = conversation.getChatbot();
             validateChatbot(chatbot);
             ChatbotWorkflowNode workflowNode = resolveWorkflowNode(conversation);
             ContextPolicyDefinition policy = parseWorkflowNodePolicy(workflowNode);
-            Message userMessage = messageService.create(conversationId, MessageRole.USER, message,
+                Message userMessage = messageService.create(context.tenantId(), conversationId, MessageRole.USER, message,
                     tokenEstimator.estimate(message), requestMetadata(metadata, context));
                 ContextAssemblyResult contextResult = assembleContext(conversation, workflowNode, policy, message,
                     metadata, context);
@@ -346,7 +348,7 @@ public class ChatRuntimeService {
     private ContextAssemblyResult assembleContext(Conversation conversation, ChatbotWorkflowNode workflowNode,
                                                   ContextPolicyDefinition policy, String latestUserMessage,
                                                   Map<String, Object> metadata, RuntimeRequestContext requestContext) {
-        List<Message> messages = messageService.listByConversation(conversation.getId());
+        List<Message> messages = messageService.listByConversation(requestContext.tenantId(), conversation.getId());
         ContextMemoryBundle memoryBundle = contextMemoryResolver.resolve(policy, conversation.getChatbot().getId(),
             conversation.getId(), conversation.getUserId(), latestUserMessage, metadata, messages);
         Map<String, Object> runtime = new LinkedHashMap<>();
@@ -409,7 +411,8 @@ public class ChatRuntimeService {
     private ChatConversationResponse applyWorkflowTransition(PreparedInvocation invocation, Long conversationId,
                                                             RuntimeRequestContext context, Message assistantMessage) {
         return transactionTemplate.execute(status -> {
-            Conversation conversation = conversationRepository.findById(conversationId)
+                Conversation conversation = conversationRepository.findByTenantIdAndIdWithChatbotAndWorkflowNode(
+                        context.tenantId(), conversationId)
                     .orElseThrow(() -> new ResourceNotFoundException("Conversation", conversationId));
             ChatbotWorkflowNode fromNode = resolveWorkflowNode(conversation);
             List<ChatbotWorkflowTransition> transitions = workflowTransitionRepository
@@ -427,7 +430,7 @@ public class ChatRuntimeService {
                     if (workflowTransitionEvaluator.evaluate(transition.getConditionExpression(), evaluationContext)) {
                         conversation.setCurrentWorkflowNode(transition.getToNode());
                         Conversation saved = conversationRepository.save(conversation);
-                        auditLogService.recordRuntime("CHAT_WORKFLOW_TRANSITIONED", "Conversation", conversationId,
+                        auditLogService.recordRuntime(context.tenantId(), "CHAT_WORKFLOW_TRANSITIONED", "Conversation", conversationId,
                                 context.requestId(), context.traceId(), context.remoteAddress(),
                                 Map.of("fromNodeKey", fromNode.getNodeKey(),
                                         "toNodeKey", transition.getToNode().getNodeKey(),
@@ -457,7 +460,7 @@ public class ChatRuntimeService {
         metadata.put("tokenBudgetReport", tokenBudgetReportMap(contextResult.tokenBudgetReport()));
         metadata.put("contextWarnings", contextResult.warnings());
         metadata.put("provider", sanitizeMetadata(providerMetadata));
-        return messageService.create(conversationId, MessageRole.ASSISTANT, content, tokenEstimator.estimate(content),
+        return messageService.create(context.tenantId(), conversationId, MessageRole.ASSISTANT, content, tokenEstimator.estimate(content),
                 metadata);
     }
 

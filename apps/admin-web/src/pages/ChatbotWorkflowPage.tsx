@@ -28,6 +28,7 @@ import {
   type ChatbotWorkflowTransition,
   type ChatbotWorkflowValidationResult,
 } from '../api/admin';
+import { formatDate } from './pageUtils';
 import { ErrorAlert, PageSectionHeader } from './shared';
 
 type NodeFormValues = Omit<ChatbotWorkflowNode, 'id' | 'metadata' | 'createdAt' | 'updatedAt'>;
@@ -149,7 +150,7 @@ export function ChatbotWorkflowPage() {
     mutationFn: () => adminApi.createChatConversation({
       chatbotId,
       anonymousSessionId: `workflow-debug-${Date.now()}`,
-      title: `Workflow debug ${new Date().toLocaleTimeString()}`,
+      title: `Workflow debug ${formatDate(new Date())}`,
     }),
     onSuccess: (conversation) => {
       setDebugConversationId(conversation.id);
@@ -164,7 +165,7 @@ export function ChatbotWorkflowPage() {
       const conversationId = debugConversationId ?? (await adminApi.createChatConversation({
         chatbotId,
         anonymousSessionId: `workflow-debug-${Date.now()}`,
-        title: `Workflow debug ${new Date().toLocaleTimeString()}`,
+        title: `Workflow debug ${formatDate(new Date())}`,
       })).id;
       setDebugConversationId(conversationId);
       return adminApi.sendChatMessage(conversationId, { message: content, metadata: { source: 'admin-workflow-debug' } });

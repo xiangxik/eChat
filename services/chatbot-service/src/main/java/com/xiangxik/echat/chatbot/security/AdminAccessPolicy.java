@@ -27,6 +27,13 @@ public class AdminAccessPolicy {
         if (path.startsWith("/api/admin/auth/")) {
             return true;
         }
+        if (path.startsWith("/api/admin/tenants")) {
+            if ("GET".equals(method)) {
+                return hasAny(roles, "SUPER_ADMIN", "ADMIN", "AUDITOR", "VIEWER")
+                        || permissions.contains("ADMIN_READ");
+            }
+            return roles.contains("SUPER_ADMIN");
+        }
         if (path.startsWith("/api/admin/identity")) {
             return hasAny(roles, "SUPER_ADMIN", "ADMIN") || permissions.contains("RBAC_MANAGE");
         }

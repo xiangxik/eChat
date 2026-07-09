@@ -1,8 +1,18 @@
 CREATE EXTENSION IF NOT EXISTS vector;
 
+CREATE TABLE tenants (
+    id BIGSERIAL PRIMARY KEY,
+    tenant_id VARCHAR(160) NOT NULL UNIQUE,
+    name VARCHAR(160) NOT NULL,
+    enabled BOOLEAN NOT NULL DEFAULT TRUE,
+    created_at TIMESTAMPTZ NOT NULL DEFAULT NOW(),
+    updated_at TIMESTAMPTZ NOT NULL DEFAULT NOW()
+);
+
 CREATE TABLE provider_configs (
     id BIGSERIAL PRIMARY KEY,
-    name VARCHAR(128) NOT NULL UNIQUE,
+    tenant_id VARCHAR(160) NOT NULL DEFAULT 'default' REFERENCES tenants(tenant_id) ON DELETE RESTRICT,
+    name VARCHAR(128) NOT NULL,
     type VARCHAR(64) NOT NULL,
     base_url VARCHAR(1024),
     api_key_secret_ref VARCHAR(512),
@@ -12,7 +22,8 @@ CREATE TABLE provider_configs (
     updated_at TIMESTAMPTZ NOT NULL DEFAULT NOW(),
     CONSTRAINT provider_configs_type_check CHECK (type IN (
         'OPENAI_COMPATIBLE', 'ANTHROPIC', 'AZURE_OPENAI', 'GEMINI', 'OLLAMA', 'CUSTOM'
-    ))
+    )),
+    CONSTRAINT provider_configs_tenant_name_unique UNIQUE (tenant_id, name)
 );
 
 CREATE TABLE model_configs (
@@ -36,11 +47,13 @@ CREATE TABLE model_configs (
 
 CREATE TABLE chatbot_configs (
     id BIGSERIAL PRIMARY KEY,
-    name VARCHAR(160) NOT NULL UNIQUE,
+    tenant_id VARCHAR(160) NOT NULL DEFAULT 'default' REFERENCES tenants(tenant_id) ON DELETE RESTRICT,
+    name VARCHAR(160) NOT NULL,
     description TEXT,
     enabled BOOLEAN NOT NULL DEFAULT TRUE,
     created_at TIMESTAMPTZ NOT NULL DEFAULT NOW(),
-    updated_at TIMESTAMPTZ NOT NULL DEFAULT NOW()
+    updated_at TIMESTAMPTZ NOT NULL DEFAULT NOW(),
+    CONSTRAINT chatbot_configs_tenant_name_unique UNIQUE (tenant_id, name)
 );
 
 CREATE TABLE chatbot_workflow_nodes (
@@ -70,6 +83,7 @@ CREATE UNIQUE INDEX chatbot_workflow_nodes_start_unique_idx
 
 CREATE TABLE conversations (
     id BIGSERIAL PRIMARY KEY,
+    tenant_id VARCHAR(160) NOT NULL DEFAULT 'default' REFERENCES tenants(tenant_id) ON DELETE RESTRICT,
     chatbot_id BIGINT NOT NULL REFERENCES chatbot_configs(id) ON DELETE RESTRICT,
     user_id VARCHAR(128),
     anonymous_session_id VARCHAR(128),
@@ -97,6 +111,7 @@ CREATE TABLE messages (
 
 CREATE TABLE memory_items (
     id BIGSERIAL PRIMARY KEY,
+    tenant_id VARCHAR(160) NOT NULL DEFAULT 'default' REFERENCES tenants(tenant_id) ON DELETE RESTRICT,
     chatbot_id BIGINT NOT NULL REFERENCES chatbot_configs(id) ON DELETE CASCADE,
     user_id VARCHAR(128),
     scope VARCHAR(32) NOT NULL,
@@ -128,11 +143,13 @@ CREATE TABLE chatbot_workflow_transitions (
 
 CREATE TABLE eval_datasets (
     id BIGSERIAL PRIMARY KEY,
-    name VARCHAR(180) NOT NULL UNIQUE,
+    tenant_id VARCHAR(160) NOT NULL DEFAULT 'default' REFERENCES tenants(tenant_id) ON DELETE RESTRICT,
+    name VARCHAR(180) NOT NULL,
     description TEXT,
     chatbot_id BIGINT NOT NULL REFERENCES chatbot_configs(id) ON DELETE RESTRICT,
     created_at TIMESTAMPTZ NOT NULL DEFAULT NOW(),
-    updated_at TIMESTAMPTZ NOT NULL DEFAULT NOW()
+    updated_at TIMESTAMPTZ NOT NULL DEFAULT NOW(),
+    CONSTRAINT eval_datasets_tenant_name_unique UNIQUE (tenant_id, name)
 );
 
 CREATE TABLE eval_cases (
@@ -146,6 +163,7 @@ CREATE TABLE eval_cases (
 
 CREATE TABLE eval_runs (
     id BIGSERIAL PRIMARY KEY,
+    tenant_id VARCHAR(160) NOT NULL DEFAULT 'default' REFERENCES tenants(tenant_id) ON DELETE RESTRICT,
     dataset_id BIGINT NOT NULL REFERENCES eval_datasets(id) ON DELETE RESTRICT,
     chatbot_id BIGINT NOT NULL REFERENCES chatbot_configs(id) ON DELETE RESTRICT,
     model_id BIGINT REFERENCES model_configs(id) ON DELETE SET NULL,
@@ -213,7 +231,7 @@ CREATE TABLE admin_users (
     username VARCHAR(128) NOT NULL UNIQUE,
     display_name VARCHAR(160) NOT NULL,
     password_hash VARCHAR(255) NOT NULL,
-    tenant_id VARCHAR(160) NOT NULL DEFAULT 'default',
+    tenant_id VARCHAR(160) NOT NULL DEFAULT 'default' REFERENCES tenants(tenant_id) ON DELETE RESTRICT,
     enabled BOOLEAN NOT NULL DEFAULT TRUE,
     system_managed BOOLEAN NOT NULL DEFAULT FALSE,
     created_at TIMESTAMPTZ NOT NULL DEFAULT NOW(),
@@ -235,14 +253,16 @@ CREATE TABLE admin_user_sessions (
 );
 
 CREATE INDEX model_configs_provider_id_idx ON model_configs(provider_id);
+CREATE INDEX provider_configs_tenant_name_idx ON provider_configs(tenant_id, name);
+CREATE INDEX chatbot_configs_tenant_name_idx ON chatbot_configs(tenant_id, name);
 CREATE INDEX chatbot_workflow_nodes_chatbot_idx ON chatbot_workflow_nodes(chatbot_id);
 CREATE INDEX chatbot_workflow_nodes_model_idx ON chatbot_workflow_nodes(model_id);
-CREATE INDEX conversations_chatbot_status_updated_idx ON conversations(chatbot_id, status, updated_at DESC);
+CREATE INDEX conversations_chatbot_status_updated_idx ON conversations(tenant_id, chatbot_id, status, updated_at DESC);
 CREATE INDEX conversations_user_updated_idx ON conversations(user_id, updated_at DESC) WHERE user_id IS NOT NULL;
 CREATE INDEX conversations_anonymous_updated_idx ON conversations(anonymous_session_id, updated_at DESC) WHERE anonymous_session_id IS NOT NULL;
 CREATE INDEX conversations_current_workflow_node_idx ON conversations(current_workflow_node_id);
 CREATE INDEX messages_conversation_created_idx ON messages(conversation_id, created_at ASC);
-CREATE INDEX memory_items_chatbot_scope_updated_idx ON memory_items(chatbot_id, scope, updated_at DESC);
+CREATE INDEX memory_items_chatbot_scope_updated_idx ON memory_items(tenant_id, chatbot_id, scope, updated_at DESC);
 CREATE INDEX memory_items_chatbot_user_updated_idx ON memory_items(chatbot_id, user_id, updated_at DESC) WHERE user_id IS NOT NULL;
 CREATE INDEX memory_items_metadata_gin_idx ON memory_items USING GIN (metadata);
 CREATE INDEX memory_items_embedding_hnsw_idx ON memory_items USING hnsw (embedding vector_cosine_ops) WHERE embedding IS NOT NULL;
@@ -264,6 +284,10 @@ CREATE INDEX admin_role_permissions_permission_id_idx ON admin_role_permissions(
 CREATE INDEX admin_users_tenant_enabled_idx ON admin_users(tenant_id, enabled);
 CREATE INDEX admin_user_sessions_user_id_idx ON admin_user_sessions(user_id);
 CREATE INDEX admin_user_sessions_expires_at_idx ON admin_user_sessions(expires_at);
+
+INSERT INTO tenants (tenant_id, name, enabled)
+VALUES ('default', 'Default Tenant', TRUE)
+ON CONFLICT (tenant_id) DO NOTHING;
 
 INSERT INTO admin_permissions (code, name, description)
 VALUES

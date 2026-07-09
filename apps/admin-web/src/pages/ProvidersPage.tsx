@@ -18,8 +18,9 @@ import { useState } from 'react';
 import type { ColumnsType } from 'antd/es/table';
 
 import { adminApi, providerTypes, type ProviderConfig, type ProviderConfigRequest } from '../api/admin';
+import { fetchAdminSession } from '../api/client';
 import { formatDate, renderEmpty } from './pageUtils';
-import { ADMIN_TABLE_SCROLL_Y, EnabledControl, ErrorAlert, PageSectionHeader } from './shared';
+import { AdminSearchPanel, buildListQuery, EnabledTag, ErrorAlert, PageSectionHeader, tableSort, type AdminTableSort } from './shared';
 
 export function ProvidersPage() {
   const { message, modal } = AntApp.useApp();
@@ -27,8 +28,12 @@ export function ProvidersPage() {
   const [form] = Form.useForm<ProviderFormValues>();
   const [editingProvider, setEditingProvider] = useState<ProviderConfig>();
   const [drawerOpen, setDrawerOpen] = useState(false);
+  const [filters, setFilters] = useState<Record<string, string | boolean>>({});
+  const [sort, setSort] = useState<AdminTableSort>({});
+  const listQuery = buildListQuery(filters, sort);
 
-  const providersQuery = useQuery({ queryKey: ['providers'], queryFn: adminApi.listProviders });
+  const providersQuery = useQuery({ queryKey: ['providers', listQuery], queryFn: () => adminApi.listProviders(listQuery) });
+  const sessionQuery = useQuery({ queryKey: ['admin-session'], queryFn: fetchAdminSession, retry: false });
   const invalidateRelatedConfigs = () => {
     void queryClient.invalidateQueries({ queryKey: ['providers'] });
     void queryClient.invalidateQueries({ queryKey: ['models'] });
@@ -58,13 +63,6 @@ export function ProvidersPage() {
     onError: (error) => message.error(error instanceof Error ? error.message : 'Delete failed'),
   });
 
-  const updateMutation = useMutation({
-    mutationFn: ({ provider, enabled }: { provider: ProviderConfig; enabled: boolean }) =>
-      adminApi.updateProvider(provider.id, { ...providerToRequest(provider), enabled }),
-    onSuccess: invalidateRelatedConfigs,
-    onError: (error) => message.error(error instanceof Error ? error.message : 'Update failed'),
-  });
-
   const testMutation = useMutation({
     mutationFn: adminApi.testProviderConnection,
     onSuccess: (result) => {
@@ -91,28 +89,28 @@ export function ProvidersPage() {
   };
 
   const columns: ColumnsType<ProviderConfig> = [
-    { title: 'Name', dataIndex: 'name', width: 220 },
-    { title: 'Type', dataIndex: 'type', width: 180, render: (value) => <Tag>{value}</Tag> },
-    { title: 'Base URL', dataIndex: 'baseUrl', ellipsis: true, render: (value) => value || '-' },
+    ...(sessionQuery.data?.superAdmin ? [{ title: 'Tenant', dataIndex: 'tenantId', width: 120, sorter: true }] : []),
+    { title: 'Name', dataIndex: 'name', width: 180, sorter: true },
+    { title: 'Type', dataIndex: 'type', width: 145, sorter: true, render: (value) => <Tag>{value}</Tag> },
+    { title: 'Base URL', dataIndex: 'baseUrl', ellipsis: true, sorter: true, render: (value) => value || '-' },
     {
       title: 'API Key',
       dataIndex: 'hasApiKey',
-      width: 130,
+      width: 105,
+      sorter: true,
       render: (hasApiKey: boolean) => <Tag color={hasApiKey ? 'processing' : 'default'}>{hasApiKey ? 'Stored' : 'Not set'}</Tag>,
     },
     {
       title: 'Status',
       dataIndex: 'enabled',
-      width: 170,
-      render: (enabled: boolean, provider) => (
-        <EnabledControl enabled={enabled} loading={updateMutation.isPending} onChange={(checked) => updateMutation.mutate({ provider, enabled: checked })} />
-      ),
+      width: 72,
+      sorter: true,
+      render: (enabled: boolean) => <EnabledTag enabled={enabled} />,
     },
-    { title: 'Updated', dataIndex: 'updatedAt', width: 190, render: formatDate },
+    { title: 'Updated', dataIndex: 'updatedAt', width: 155, sorter: true, render: formatDate },
     {
       title: 'Actions',
-      width: 240,
-      fixed: 'right',
+      width: 190,
       render: (_, provider) => (
         <Space>
           <Button size="small" onClick={() => openEdit(provider)}>
@@ -134,6 +132,19 @@ export function ProvidersPage() {
   return (
     <div className="page-stack">
       <ErrorAlert error={providersQuery.error} />
+      <AdminSearchPanel
+        fields={[
+          { name: 'search', label: 'Keyword' },
+          ...(sessionQuery.data?.superAdmin ? [{ name: 'tenantId', label: 'Tenant' }] : []),
+          { name: 'name', label: 'Name' },
+          { name: 'type', label: 'Type', type: 'select', options: providerTypes.map((type) => ({ label: type, value: type })) },
+          { name: 'baseUrl', label: 'Base URL' },
+          { name: 'hasApiKey', label: 'API Key', type: 'select', options: [{ label: 'Stored', value: true }, { label: 'Not set', value: false }] },
+          { name: 'enabled', label: 'Status', type: 'select', options: [{ label: 'Enabled', value: true }, { label: 'Disabled', value: false }] },
+        ]}
+        initialValues={filters}
+        onSearch={(values) => setFilters(values as Record<string, string | boolean>)}
+      />
       <Card className="admin-data-card">
         <PageSectionHeader
           title="Provider Management"
@@ -151,7 +162,7 @@ export function ProvidersPage() {
           columns={columns}
           locale={{ emptyText: renderEmpty('No providers configured') }}
           pagination={{ size: 'small' }}
-          scroll={{ x: 1040, y: ADMIN_TABLE_SCROLL_Y }}
+          onChange={(_, __, sorter) => setSort(tableSort(sorter))}
         />
       </Card>
       <Drawer
@@ -193,16 +204,6 @@ export function ProvidersPage() {
 }
 
 type ProviderFormValues = ProviderConfigRequest;
-
-function providerToRequest(provider: ProviderConfig): ProviderConfigRequest {
-  return {
-    name: provider.name,
-    type: provider.type,
-    baseUrl: provider.baseUrl,
-    apiKeySecretRef: provider.apiKeySecretRef,
-    enabled: provider.enabled,
-  };
-}
 
 function toProviderRequest(values: ProviderFormValues): ProviderConfigRequest {
   return {

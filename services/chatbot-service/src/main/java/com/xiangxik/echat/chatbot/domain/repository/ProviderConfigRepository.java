@@ -7,7 +7,11 @@ import org.springframework.data.jpa.repository.JpaRepository;
 
 public interface ProviderConfigRepository extends JpaRepository<ProviderConfig, Long> {
 
-    Optional<ProviderConfig> findByName(String name);
+    Optional<ProviderConfig> findByTenantIdAndId(String tenantId, Long id);
 
-    List<ProviderConfig> findByEnabledTrueOrderByNameAsc();
+    Optional<ProviderConfig> findByTenantIdAndName(String tenantId, String name);
+
+    List<ProviderConfig> findByTenantIdOrderByNameAsc(String tenantId);
+
+    List<ProviderConfig> findByTenantIdAndEnabledTrueOrderByNameAsc(String tenantId);
 }

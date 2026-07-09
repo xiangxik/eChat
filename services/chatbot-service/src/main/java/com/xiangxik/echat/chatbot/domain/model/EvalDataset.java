@@ -11,6 +11,9 @@ import jakarta.persistence.Table;
 @Table(name = "eval_datasets")
 public class EvalDataset extends AuditableEntity {
 
+    @Column(name = "tenant_id", nullable = false, length = 160)
+    private String tenantId = "default";
+
     @Column(name = "name", nullable = false, unique = true, length = 180)
     private String name;
 
@@ -20,6 +23,14 @@ public class EvalDataset extends AuditableEntity {
     @ManyToOne(fetch = FetchType.LAZY, optional = false)
     @JoinColumn(name = "chatbot_id", nullable = false)
     private ChatbotConfig chatbot;
+
+    public String getTenantId() {
+        return tenantId;
+    }
+
+    public void setTenantId(String tenantId) {
+        this.tenantId = tenantId;
+    }
 
     public String getName() {
         return name;

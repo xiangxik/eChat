@@ -32,11 +32,9 @@ import {
   type EvalRunRequest,
 } from '../api/admin';
 import { formatDate, parseJsonObject, renderEmpty, stringifyJson } from './pageUtils';
-import { ErrorAlert } from './shared';
+import { AdminSearchPanel, buildListQuery, ErrorAlert, tableSort, type AdminTableSort } from './shared';
 
 const { Paragraph, Text } = Typography;
-const EVAL_DATASET_SCROLL_Y = 'calc(100vh - 162px)';
-const EVAL_PANEL_SCROLL_Y = '34vh';
 
 export function EvalsPage() {
   const { message } = AntApp.useApp();
@@ -50,12 +48,21 @@ export function EvalsPage() {
   const [selectedDatasetId, setSelectedDatasetId] = useState<number>();
   const [activeRunId, setActiveRunId] = useState<number>();
   const [viewingResult, setViewingResult] = useState<EvalResult>();
+  const [datasetFilters, setDatasetFilters] = useState<Record<string, string>>({});
+  const [caseFilters, setCaseFilters] = useState<Record<string, string>>({});
+  const [resultFilters, setResultFilters] = useState<Record<string, string | boolean>>({});
+  const [datasetSort, setDatasetSort] = useState<AdminTableSort>({ sortField: 'updatedAt', sortOrder: 'descend' });
+  const [caseSort, setCaseSort] = useState<AdminTableSort>({});
+  const [resultSort, setResultSort] = useState<AdminTableSort>({});
+  const datasetListQuery = buildListQuery(datasetFilters, datasetSort);
+  const caseListQuery = buildListQuery(caseFilters, caseSort);
+  const resultListQuery = buildListQuery(resultFilters, resultSort);
 
-  const datasetsQuery = useQuery({ queryKey: ['eval-datasets'], queryFn: adminApi.listEvalDatasets });
+  const datasetsQuery = useQuery({ queryKey: ['eval-datasets', datasetListQuery], queryFn: () => adminApi.listEvalDatasets(datasetListQuery) });
   const chatbotsQuery = useQuery({ queryKey: ['chatbots'], queryFn: adminApi.listChatbots });
   const casesQuery = useQuery({
-    queryKey: ['eval-cases', selectedDatasetId],
-    queryFn: () => adminApi.listEvalCases(selectedDatasetId!),
+    queryKey: ['eval-cases', selectedDatasetId, caseListQuery],
+    queryFn: () => adminApi.listEvalCases(selectedDatasetId!, caseListQuery),
     enabled: selectedDatasetId !== undefined,
   });
   const runQuery = useQuery({
@@ -65,8 +72,8 @@ export function EvalsPage() {
     refetchInterval: (query) => (isRunActive(query.state.data) ? 1200 : false),
   });
   const resultsQuery = useQuery({
-    queryKey: ['eval-results', activeRunId],
-    queryFn: () => adminApi.listEvalResults(activeRunId!),
+    queryKey: ['eval-results', activeRunId, resultListQuery],
+    queryFn: () => adminApi.listEvalResults(activeRunId!, resultListQuery),
     enabled: activeRunId !== undefined && runQuery.data?.status !== 'PENDING',
     refetchInterval: () => (isRunActive(runQuery.data) ? 1200 : false),
   });
@@ -135,14 +142,13 @@ export function EvalsPage() {
   };
 
   const datasetColumns: ColumnsType<EvalDataset> = [
-    { title: 'Name', dataIndex: 'name', width: 240 },
-    { title: 'Description', dataIndex: 'description', ellipsis: true, render: (value) => value || '-' },
-    { title: 'Chatbot', dataIndex: 'chatbotId', width: 220, render: (id: number) => chatbotNameById.get(id) ?? `#${id}` },
-    { title: 'Updated', dataIndex: 'updatedAt', width: 190, render: formatDate },
+    { title: 'Name', dataIndex: 'name', width: 180, sorter: true },
+    { title: 'Description', dataIndex: 'description', ellipsis: true, sorter: true, render: (value) => value || '-' },
+    { title: 'Chatbot', dataIndex: 'chatbotId', width: 160, sorter: true, render: (id: number) => chatbotNameById.get(id) ?? `#${id}` },
+    { title: 'Updated', dataIndex: 'updatedAt', width: 150, sorter: true, render: formatDate },
     {
       title: 'Actions',
-      width: 220,
-      fixed: 'right',
+      width: 135,
       render: (_, dataset) => (
         <Space>
           <Button size="small" onClick={() => setSelectedDatasetId(dataset.id)}>
@@ -157,25 +163,24 @@ export function EvalsPage() {
   ];
 
   const caseColumns: ColumnsType<EvalCase> = [
-    { title: 'Input', dataIndex: 'input', ellipsis: true },
-    { title: 'Expected Behavior', dataIndex: 'expectedBehavior', ellipsis: true, render: (value) => value || '-' },
+    { title: 'Input', dataIndex: 'input', ellipsis: true, sorter: true },
+    { title: 'Expected Behavior', dataIndex: 'expectedBehavior', ellipsis: true, sorter: true, render: (value) => value || '-' },
     {
       title: 'Keywords',
       dataIndex: 'expectedKeywords',
-      width: 260,
+      width: 180,
       render: (keywords: string[]) => keywords?.length ? keywords.map((keyword) => <Tag key={keyword}>{keyword}</Tag>) : '-',
     },
   ];
 
   const resultColumns: ColumnsType<EvalResult> = [
-    { title: 'Case', dataIndex: 'caseId', width: 90, render: (id: number) => `#${id}` },
-    { title: 'Result', dataIndex: 'passed', width: 120, render: (passed: boolean) => <PassTag passed={passed} /> },
-    { title: 'Output', dataIndex: 'output', ellipsis: true, render: (value?: string) => value || '-' },
-    { title: 'Error', dataIndex: 'error', ellipsis: true, render: (value?: string) => value || '-' },
+    { title: 'Case', dataIndex: 'caseId', width: 90, sorter: true, render: (id: number) => `#${id}` },
+    { title: 'Result', dataIndex: 'passed', width: 120, sorter: true, render: (passed: boolean) => <PassTag passed={passed} /> },
+    { title: 'Output', dataIndex: 'output', ellipsis: true, sorter: true, render: (value?: string) => value || '-' },
+    { title: 'Error', dataIndex: 'error', ellipsis: true, sorter: true, render: (value?: string) => value || '-' },
     {
       title: 'Actions',
       width: 120,
-      fixed: 'right',
       render: (_, result) => (
         <Button size="small" icon={<EyeOutlined />} onClick={() => setViewingResult(result)}>
           View
@@ -198,6 +203,16 @@ export function EvalsPage() {
             </Button>
           }
         >
+          <AdminSearchPanel
+            fields={[
+              { name: 'search', label: 'Keyword' },
+              { name: 'name', label: 'Name' },
+              { name: 'description', label: 'Description' },
+              { name: 'chatbotId', label: 'Chatbot ID' },
+            ]}
+            initialValues={datasetFilters}
+            onSearch={(values) => setDatasetFilters(values as Record<string, string>)}
+          />
           <Table
             size="small"
             rowKey="id"
@@ -207,7 +222,7 @@ export function EvalsPage() {
             rowClassName={(dataset) => (dataset.id === selectedDatasetId ? 'selected-table-row' : '')}
             locale={{ emptyText: renderEmpty(enabledChatbots(chatbotsQuery.data).length ? 'No eval datasets configured' : 'Enable a chatbot first') }}
             pagination={{ size: 'small' }}
-            scroll={{ x: 1040, y: EVAL_DATASET_SCROLL_Y }}
+            onChange={(_, __, sorter) => setDatasetSort(tableSort(sorter))}
           />
         </Card>
 
@@ -227,6 +242,16 @@ export function EvalsPage() {
               </Space>
             }
           >
+            <AdminSearchPanel
+              fields={[
+                { name: 'search', label: 'Keyword' },
+                { name: 'input', label: 'Input' },
+                { name: 'expectedBehavior', label: 'Expected' },
+                { name: 'keyword', label: 'Keyword Tag' },
+              ]}
+              initialValues={caseFilters}
+              onSearch={(values) => setCaseFilters(values as Record<string, string>)}
+            />
             <Table
               size="small"
               rowKey="id"
@@ -235,12 +260,22 @@ export function EvalsPage() {
               columns={caseColumns}
               locale={{ emptyText: renderEmpty(selectedDatasetId ? 'No cases in this dataset' : 'Select a dataset') }}
               pagination={{ size: 'small' }}
-              scroll={{ x: 900, y: EVAL_PANEL_SCROLL_Y }}
+              onChange={(_, __, sorter) => setCaseSort(tableSort(sorter))}
             />
           </Card>
 
           <Card size="small" className="eval-card" title="Current Run" extra={runQuery.data ? <RunStatusTag status={runQuery.data.status} /> : null}>
             {runQuery.data ? <RunSummary run={runQuery.data} /> : <Text type="secondary">Start a dataset run to inspect status and results.</Text>}
+            <AdminSearchPanel
+              fields={[
+                { name: 'search', label: 'Keyword' },
+                { name: 'output', label: 'Output' },
+                { name: 'error', label: 'Error' },
+                { name: 'passed', label: 'Result', type: 'select', options: [{ label: 'Passed', value: true }, { label: 'Failed', value: false }] },
+              ]}
+              initialValues={resultFilters}
+              onSearch={(values) => setResultFilters(values as Record<string, string | boolean>)}
+            />
             <Table
               size="small"
               className="eval-results-table"
@@ -250,7 +285,7 @@ export function EvalsPage() {
               columns={resultColumns}
               locale={{ emptyText: renderEmpty(activeRunId ? 'No results yet' : 'No active eval run') }}
               pagination={{ size: 'small' }}
-              scroll={{ x: 980, y: EVAL_PANEL_SCROLL_Y }}
+              onChange={(_, __, sorter) => setResultSort(tableSort(sorter))}
             />
           </Card>
         </div>

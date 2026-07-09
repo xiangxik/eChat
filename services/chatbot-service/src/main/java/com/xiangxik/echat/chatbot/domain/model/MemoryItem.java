@@ -18,12 +18,23 @@ import org.hibernate.type.SqlTypes;
 @Table(name = "memory_items")
 public class MemoryItem extends AuditableEntity {
 
+    @Column(name = "tenant_id", nullable = false, length = 160)
+    private String tenantId = "default";
+
     @ManyToOne(fetch = FetchType.LAZY, optional = false)
     @JoinColumn(name = "chatbot_id", nullable = false)
     private ChatbotConfig chatbot;
 
     @Column(name = "user_id", length = 128)
     private String userId;
+
+    public String getTenantId() {
+        return tenantId;
+    }
+
+    public void setTenantId(String tenantId) {
+        this.tenantId = tenantId;
+    }
 
     @Enumerated(EnumType.STRING)
     @Column(name = "scope", nullable = false, length = 32)

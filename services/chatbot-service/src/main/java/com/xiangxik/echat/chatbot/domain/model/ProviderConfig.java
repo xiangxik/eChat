@@ -10,6 +10,9 @@ import jakarta.persistence.Table;
 @Table(name = "provider_configs")
 public class ProviderConfig extends AuditableEntity {
 
+    @Column(name = "tenant_id", nullable = false, length = 160)
+    private String tenantId = "default";
+
     @Column(name = "name", nullable = false, unique = true, length = 128)
     private String name;
 
@@ -28,6 +31,14 @@ public class ProviderConfig extends AuditableEntity {
 
     @Column(name = "enabled", nullable = false)
     private boolean enabled = true;
+
+    public String getTenantId() {
+        return tenantId;
+    }
+
+    public void setTenantId(String tenantId) {
+        this.tenantId = tenantId;
+    }
 
     public String getName() {
         return name;

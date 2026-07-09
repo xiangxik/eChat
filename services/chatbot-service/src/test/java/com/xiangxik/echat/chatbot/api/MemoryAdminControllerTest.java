@@ -46,6 +46,7 @@ class MemoryAdminControllerTest extends PostgresIntegrationTest {
 
     private static final String ADMIN_TOKEN = "test-admin-token";
     private static final String API_KEY = "sk-memory-secret";
+    private static final String TENANT_ID = "tenant-a";
 
     private MockMvc mockMvc;
 
@@ -139,6 +140,7 @@ class MemoryAdminControllerTest extends PostgresIntegrationTest {
 
     private Long createFixtures() {
         ProviderConfig provider = new ProviderConfig();
+        provider.setTenantId(TENANT_ID);
         provider.setName("Memory Embedding Provider");
         provider.setType(ProviderType.OPENAI_COMPATIBLE);
         provider.setBaseUrl("http://localhost:8081/v1");
@@ -157,6 +159,7 @@ class MemoryAdminControllerTest extends PostgresIntegrationTest {
         modelConfigRepository.save(model);
 
         ChatbotConfig chatbot = new ChatbotConfig();
+        chatbot.setTenantId(TENANT_ID);
         chatbot.setName("Memory Test Chatbot");
         chatbot.setDescription("Memory admin test chatbot");
         chatbot.setEnabled(true);

@@ -9,16 +9,21 @@ import org.springframework.data.repository.query.Param;
 
 public interface MemoryItemRepository extends JpaRepository<MemoryItem, Long> {
 
-        List<MemoryItem> findByChatbotIdOrderByUpdatedAtDesc(Long chatbotId);
+    List<MemoryItem> findByTenantIdAndChatbotIdOrderByUpdatedAtDesc(String tenantId, Long chatbotId);
 
-    List<MemoryItem> findByChatbotIdAndScopeOrderByUpdatedAtDesc(Long chatbotId, MemoryScope scope);
+    List<MemoryItem> findByTenantIdAndChatbotIdAndScopeOrderByUpdatedAtDesc(String tenantId, Long chatbotId,
+                                                                             MemoryScope scope);
 
-    List<MemoryItem> findByChatbotIdAndUserIdOrderByUpdatedAtDesc(Long chatbotId, String userId);
+    List<MemoryItem> findByTenantIdAndChatbotIdAndUserIdOrderByUpdatedAtDesc(String tenantId, Long chatbotId,
+                                                                              String userId);
+
+    java.util.Optional<MemoryItem> findByTenantIdAndId(String tenantId, Long id);
 
         @Query(value = """
                         SELECT id, 1 - (embedding <=> CAST(:embedding AS vector)) AS score
                         FROM memory_items
-                        WHERE chatbot_id = :chatbotId
+                        WHERE tenant_id = :tenantId
+                            AND chatbot_id = :chatbotId
                             AND scope IN ('LONG_TERM', 'GLOBAL')
                             AND embedding IS NOT NULL
                             AND (CAST(:userId AS varchar) IS NULL OR user_id = CAST(:userId AS varchar) OR user_id IS NULL)
@@ -26,7 +31,8 @@ public interface MemoryItemRepository extends JpaRepository<MemoryItem, Long> {
                         ORDER BY embedding <=> CAST(:embedding AS vector)
                         LIMIT :topK
                         """, nativeQuery = true)
-        List<MemoryItemSearchHit> searchLongTermByEmbedding(@Param("chatbotId") Long chatbotId,
+                List<MemoryItemSearchHit> searchLongTermByEmbedding(@Param("tenantId") String tenantId,
+                                                                    @Param("chatbotId") Long chatbotId,
                                                                                                                 @Param("userId") String userId,
                                                                                                                 @Param("embedding") String embedding,
                                                                                                                 @Param("minScore") double minScore,

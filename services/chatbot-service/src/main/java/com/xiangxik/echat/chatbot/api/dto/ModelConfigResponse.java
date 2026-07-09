@@ -7,6 +7,7 @@ import java.util.Map;
 @Schema(description = "Model configuration response")
 public record ModelConfigResponse(
         Long id,
+        String tenantId,
         Long providerId,
         String providerName,
         String displayName,

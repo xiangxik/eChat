@@ -29,6 +29,11 @@ interface ApiErrorPayload {
 
 export interface AdminSessionResponse {
   authenticated: boolean;
+  actorId?: string;
+  displayName?: string;
+  tenantId?: string;
+  roles?: string[];
+  superAdmin?: boolean;
 }
 
 export interface AdminLoginRequest {
@@ -41,6 +46,11 @@ export async function apiRequest<T>(path: string, options: RequestInit = {}): Pr
 
   if (options.body && !headers.has('Content-Type')) {
     headers.set('Content-Type', 'application/json');
+  }
+
+  const selectedTenantId = readSelectedAdminTenantId();
+  if (selectedTenantId && path.startsWith('/api/admin/') && !path.startsWith('/api/admin/auth/') && !headers.has('X-Tenant-Id')) {
+    headers.set('X-Tenant-Id', selectedTenantId);
   }
 
   const response = await fetch(`${apiBaseUrl}${path}`, { ...options, headers, credentials: 'include' });
@@ -70,6 +80,24 @@ export function logoutAdmin() {
 
 export function fetchAdminSession() {
   return apiRequest<AdminSessionResponse>('/api/admin/auth/session');
+}
+
+const adminTenantStorageKey = 'echat.admin.selectedTenantId';
+
+export function readSelectedAdminTenantId() {
+  try {
+    return window.localStorage.getItem(adminTenantStorageKey) ?? undefined;
+  } catch {
+    return undefined;
+  }
+}
+
+export function writeSelectedAdminTenantId(tenantId: string) {
+  try {
+    window.localStorage.setItem(adminTenantStorageKey, tenantId);
+  } catch {
+    // Ignore storage failures; the current tab will still update React state.
+  }
 }
 
 export async function fetchHealth(): Promise<HealthResponse> {

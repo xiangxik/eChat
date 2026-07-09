@@ -20,8 +20,9 @@ import { useState } from 'react';
 import type { ColumnsType } from 'antd/es/table';
 
 import { adminApi, modelTypes, type ModelConfig, type ModelConfigRequest, type ModelOption } from '../api/admin';
+import { fetchAdminSession } from '../api/client';
 import { parseJsonObject, renderEmpty, stringifyJson } from './pageUtils';
-import { ADMIN_TABLE_SCROLL_Y, EnabledControl, ErrorAlert, PageSectionHeader } from './shared';
+import { AdminSearchPanel, buildListQuery, EnabledTag, ErrorAlert, PageSectionHeader, tableSort, type AdminTableSort } from './shared';
 
 export function ModelsPage() {
   const { message, modal } = AntApp.useApp();
@@ -29,10 +30,14 @@ export function ModelsPage() {
   const [form] = Form.useForm<ModelFormValues>();
   const [editingModel, setEditingModel] = useState<ModelConfig>();
   const [drawerOpen, setDrawerOpen] = useState(false);
+  const [filters, setFilters] = useState<Record<string, string | boolean>>({});
+  const [sort, setSort] = useState<AdminTableSort>({});
   const selectedProviderId = Form.useWatch('providerId', form);
+  const listQuery = buildListQuery(filters, sort);
 
   const providersQuery = useQuery({ queryKey: ['providers'], queryFn: adminApi.listProviders });
-  const modelsQuery = useQuery({ queryKey: ['models'], queryFn: adminApi.listModels });
+  const modelsQuery = useQuery({ queryKey: ['models', listQuery], queryFn: () => adminApi.listModels(listQuery) });
+  const sessionQuery = useQuery({ queryKey: ['admin-session'], queryFn: fetchAdminSession, retry: false });
   const enabledProviders = (providersQuery.data ?? []).filter((provider) => provider.enabled);
   const modelOptionsQuery = useQuery({
     queryKey: ['model-options', selectedProviderId],
@@ -61,13 +66,6 @@ export function ModelsPage() {
       void invalidateModels();
     },
     onError: (error) => message.error(error instanceof Error ? error.message : 'Delete failed'),
-  });
-
-  const updateMutation = useMutation({
-    mutationFn: ({ model, enabled }: { model: ModelConfig; enabled: boolean }) =>
-      adminApi.updateModel(model.id, { ...modelToRequest(model), enabled }),
-    onSuccess: () => void invalidateModels(),
-    onError: (error) => message.error(error instanceof Error ? error.message : 'Update failed'),
   });
 
   const testMutation = useMutation({
@@ -138,29 +136,30 @@ export function ModelsPage() {
   };
 
   const columns: ColumnsType<ModelConfig> = [
-    { title: 'Display Name', dataIndex: 'displayName', width: 220 },
-    { title: 'Provider', dataIndex: 'providerName', width: 190 },
-    { title: 'Model Name', dataIndex: 'modelName', width: 220, ellipsis: true },
-    { title: 'Type', dataIndex: 'modelType', width: 120, render: (value) => <Tag>{value}</Tag> },
-    { title: 'Context Tokens', dataIndex: 'maxContextTokens', width: 150, render: (value) => value ?? '-' },
+    ...(sessionQuery.data?.superAdmin ? [{ title: 'Tenant', dataIndex: 'tenantId', width: 110, sorter: true }] : []),
+    { title: 'Display Name', dataIndex: 'displayName', sorter: true },
+    { title: 'Provider', dataIndex: 'providerName', sorter: true },
+    { title: 'Model Name', dataIndex: 'modelName', ellipsis: true, sorter: true },
+    { title: 'Type', dataIndex: 'modelType', width: 105, sorter: true, render: (value) => <Tag>{value}</Tag> },
+    { title: 'Context Tokens', dataIndex: 'maxContextTokens', width: 110, sorter: true, render: (value) => value ?? '-' },
     {
       title: 'Sampling',
-      width: 170,
+      width: 120,
+      sorter: true,
+      dataIndex: 'defaultTemperature',
       render: (_, model) => `T ${model.defaultTemperature ?? '-'} / P ${model.defaultTopP ?? '-'}`,
     },
-    { title: 'Streaming', dataIndex: 'supportsStreaming', width: 120, render: (value) => (value ? 'Yes' : 'No') },
+    { title: 'Streaming', dataIndex: 'supportsStreaming', width: 95, sorter: true, render: (value) => (value ? 'Yes' : 'No') },
     {
       title: 'Status',
       dataIndex: 'enabled',
-      width: 170,
-      render: (enabled: boolean, model) => (
-        <EnabledControl enabled={enabled} loading={updateMutation.isPending} onChange={(checked) => updateMutation.mutate({ model, enabled: checked })} />
-      ),
+      width: 72,
+      sorter: true,
+      render: (enabled: boolean) => <EnabledTag enabled={enabled} />,
     },
     {
       title: 'Actions',
-      width: 280,
-      fixed: 'right',
+      width: 190,
       render: (_, model) => (
         <Space>
           <Button size="small" onClick={() => openEdit(model)}>
@@ -187,6 +186,20 @@ export function ModelsPage() {
   return (
     <div className="page-stack">
       <ErrorAlert error={modelsQuery.error ?? providersQuery.error} />
+      <AdminSearchPanel
+        fields={[
+          { name: 'search', label: 'Keyword' },
+          ...(sessionQuery.data?.superAdmin ? [{ name: 'tenantId', label: 'Tenant' }] : []),
+          { name: 'displayName', label: 'Display Name' },
+          { name: 'providerName', label: 'Provider' },
+          { name: 'modelName', label: 'Model Name' },
+          { name: 'modelType', label: 'Type', type: 'select', options: modelTypes.map((type) => ({ label: type, value: type })) },
+          { name: 'supportsStreaming', label: 'Streaming', type: 'select', options: [{ label: 'Yes', value: true }, { label: 'No', value: false }] },
+          { name: 'enabled', label: 'Status', type: 'select', options: [{ label: 'Enabled', value: true }, { label: 'Disabled', value: false }] },
+        ]}
+        initialValues={filters}
+        onSearch={(values) => setFilters(values as Record<string, string | boolean>)}
+      />
       <Card className="admin-data-card">
         <PageSectionHeader
           title="Model Management"
@@ -204,7 +217,7 @@ export function ModelsPage() {
           columns={columns}
           locale={{ emptyText: renderEmpty(enabledProviders.length ? 'No models configured' : 'Enable a provider first') }}
           pagination={{ size: 'small' }}
-          scroll={{ x: 1300, y: ADMIN_TABLE_SCROLL_Y }}
+          onChange={(_, __, sorter) => setSort(tableSort(sorter))}
         />
       </Card>
       <Drawer
@@ -282,21 +295,6 @@ export function ModelsPage() {
 
 interface ModelFormValues extends Omit<ModelConfigRequest, 'metadata'> {
   metadataJson?: string;
-}
-
-function modelToRequest(model: ModelConfig): ModelConfigRequest {
-  return {
-    providerId: model.providerId,
-    displayName: model.displayName,
-    modelName: model.modelName,
-    modelType: model.modelType,
-    maxContextTokens: model.maxContextTokens,
-    defaultTemperature: model.defaultTemperature,
-    defaultTopP: model.defaultTopP,
-    supportsStreaming: model.supportsStreaming,
-    enabled: model.enabled,
-    metadata: model.metadata,
-  };
 }
 
 function toModelRequest(values: ModelFormValues): ModelConfigRequest {

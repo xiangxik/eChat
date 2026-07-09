@@ -1,12 +1,15 @@
 package com.xiangxik.echat.chatbot.api.admin;
 
 import com.xiangxik.echat.chatbot.api.dto.AuditLogResponse;
+import com.xiangxik.echat.chatbot.service.AdminListQuery;
 import com.xiangxik.echat.chatbot.service.AuditLogService;
 import io.swagger.v3.oas.annotations.Operation;
 import io.swagger.v3.oas.annotations.tags.Tag;
 import java.util.List;
+import java.util.Map;
 import org.springframework.web.bind.annotation.GetMapping;
 import org.springframework.web.bind.annotation.RequestMapping;
+import org.springframework.web.bind.annotation.RequestParam;
 import org.springframework.web.bind.annotation.RestController;
 
 @RestController
@@ -22,7 +25,7 @@ public class AuditLogAdminController {
 
     @GetMapping
     @Operation(summary = "List recent audit logs")
-    public List<AuditLogResponse> listRecent() {
-        return auditLogService.listRecent();
+    public List<AuditLogResponse> listRecent(@RequestParam Map<String, String> params) {
+        return auditLogService.listRecent(AdminListQuery.from(params));
     }
 }

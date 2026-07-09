@@ -17,6 +17,9 @@ import org.hibernate.type.SqlTypes;
 @Table(name = "conversations")
 public class Conversation extends AuditableEntity {
 
+    @Column(name = "tenant_id", nullable = false, length = 160)
+    private String tenantId = "default";
+
     @ManyToOne(fetch = FetchType.LAZY, optional = false)
     @JoinColumn(name = "chatbot_id", nullable = false)
     private ChatbotConfig chatbot;
@@ -33,6 +36,14 @@ public class Conversation extends AuditableEntity {
     @Enumerated(EnumType.STRING)
     @Column(name = "status", nullable = false, length = 32)
     private ConversationStatus status = ConversationStatus.ACTIVE;
+
+    public String getTenantId() {
+        return tenantId;
+    }
+
+    public void setTenantId(String tenantId) {
+        this.tenantId = tenantId;
+    }
 
     @ManyToOne(fetch = FetchType.LAZY)
     @JoinColumn(name = "current_workflow_node_id")

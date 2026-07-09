@@ -5,17 +5,14 @@ import jakarta.persistence.Entity;
 import jakarta.persistence.Table;
 
 @Entity
-@Table(name = "chatbot_configs")
-public class ChatbotConfig extends AuditableEntity {
+@Table(name = "tenants")
+public class Tenant extends AuditableEntity {
 
-    @Column(name = "tenant_id", nullable = false, length = 160)
-    private String tenantId = "default";
+    @Column(name = "tenant_id", nullable = false, unique = true, length = 160)
+    private String tenantId;
 
-    @Column(name = "name", nullable = false, unique = true, length = 160)
+    @Column(name = "name", nullable = false, length = 160)
     private String name;
-
-    @Column(name = "description", columnDefinition = "text")
-    private String description;
 
     @Column(name = "enabled", nullable = false)
     private boolean enabled = true;
@@ -34,14 +31,6 @@ public class ChatbotConfig extends AuditableEntity {
 
     public void setName(String name) {
         this.name = name;
-    }
-
-    public String getDescription() {
-        return description;
-    }
-
-    public void setDescription(String description) {
-        this.description = description;
     }
 
     public boolean isEnabled() {

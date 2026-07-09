@@ -47,24 +47,59 @@ public class AdminIdentityService {
     private final AdminPermissionRepository permissionRepository;
     private final AdminUserSessionRepository sessionRepository;
     private final PasswordEncoder passwordEncoder;
+    private final TenantService tenantService;
     private final SecureRandom secureRandom = new SecureRandom();
 
     public AdminIdentityService(AdminUserRepository userRepository, AdminRoleRepository roleRepository,
                                 AdminPermissionRepository permissionRepository,
-                                AdminUserSessionRepository sessionRepository, PasswordEncoder passwordEncoder) {
+                                AdminUserSessionRepository sessionRepository, PasswordEncoder passwordEncoder,
+                                TenantService tenantService) {
         this.userRepository = userRepository;
         this.roleRepository = roleRepository;
         this.permissionRepository = permissionRepository;
         this.sessionRepository = sessionRepository;
         this.passwordEncoder = passwordEncoder;
+        this.tenantService = tenantService;
     }
 
     @Transactional(readOnly = true)
     public List<AdminUserResponse> listUsers() {
-        return userRepository.findAll().stream()
-                .sorted(Comparator.comparing(AdminUser::getUsername))
+        return listUsers(AdminListQuery.empty());
+    }
+
+    @Transactional(readOnly = true)
+    public List<AdminUserResponse> listUsers(AdminListQuery query) {
+        List<AdminUser> users = tenantService.currentPrincipalIsSuperAdmin()
+                ? userRepository.findAll()
+                : userRepository.findByTenantId(tenantService.currentTenantId());
+        List<AdminUserResponse> responses = users.stream()
                 .map(this::toUserResponse)
                 .toList();
+        return AdminListQuerySupport.apply(responses, query, user -> matchesUserListQuery(user, query), userSorters(), "username");
+    }
+
+    private boolean matchesUserListQuery(AdminUserResponse user, AdminListQuery query) {
+        return AdminListQuerySupport.containsAny(query.search(), user.username(), user.displayName(), user.tenantId(),
+                user.enabled() ? "enabled" : "disabled", user.systemUser() ? "system" : "custom",
+                user.roles().stream().map(AdminRoleResponse::code).toList())
+                && AdminListQuerySupport.contains(user.username(), query.value("username"))
+                && AdminListQuerySupport.contains(user.displayName(), query.value("displayName"))
+                && AdminListQuerySupport.contains(user.tenantId(), query.value("tenantId"))
+                && AdminListQuerySupport.equalsBoolean(user.enabled(), query.booleanValue("enabled"))
+                && AdminListQuerySupport.equalsBoolean(user.systemUser(), query.booleanValue("systemUser"))
+                && (query.value("role") == null || user.roles().stream().anyMatch(role -> AdminListQuerySupport.contains(role.code(), query.value("role"))));
+    }
+
+    private Map<String, java.util.function.Function<AdminUserResponse, ?>> userSorters() {
+        return Map.ofEntries(
+                Map.entry("username", AdminUserResponse::username),
+                Map.entry("displayName", AdminUserResponse::displayName),
+                Map.entry("tenantId", AdminUserResponse::tenantId),
+                Map.entry("enabled", AdminUserResponse::enabled),
+                Map.entry("systemUser", AdminUserResponse::systemUser),
+                Map.entry("createdAt", AdminUserResponse::createdAt),
+                Map.entry("updatedAt", AdminUserResponse::updatedAt)
+        );
     }
 
     @Transactional
@@ -110,10 +145,36 @@ public class AdminIdentityService {
 
     @Transactional(readOnly = true)
     public List<AdminRoleResponse> listRoles() {
-        return roleRepository.findAll().stream()
-                .sorted(Comparator.comparing(AdminRole::getCode))
+        return listRoles(AdminListQuery.empty());
+    }
+
+    @Transactional(readOnly = true)
+    public List<AdminRoleResponse> listRoles(AdminListQuery query) {
+        List<AdminRoleResponse> responses = roleRepository.findAll().stream()
                 .map(this::toRoleResponse)
                 .toList();
+        return AdminListQuerySupport.apply(responses, query, role -> matchesRoleListQuery(role, query), roleSorters(), "code");
+    }
+
+    private boolean matchesRoleListQuery(AdminRoleResponse role, AdminListQuery query) {
+        return AdminListQuerySupport.containsAny(query.search(), role.code(), role.name(), role.description(),
+                role.systemRole() ? "system" : "custom", role.permissions().stream().map(AdminPermissionResponse::code).toList())
+                && AdminListQuerySupport.contains(role.code(), query.value("code"))
+                && AdminListQuerySupport.contains(role.name(), query.value("name"))
+                && AdminListQuerySupport.contains(role.description(), query.value("description"))
+                && AdminListQuerySupport.equalsBoolean(role.systemRole(), query.booleanValue("systemRole"))
+                && (query.value("permission") == null || role.permissions().stream().anyMatch(permission -> AdminListQuerySupport.contains(permission.code(), query.value("permission"))));
+    }
+
+    private Map<String, java.util.function.Function<AdminRoleResponse, ?>> roleSorters() {
+        return Map.of(
+                "code", AdminRoleResponse::code,
+                "name", AdminRoleResponse::name,
+                "description", AdminRoleResponse::description,
+                "systemRole", AdminRoleResponse::systemRole,
+                "createdAt", AdminRoleResponse::createdAt,
+                "updatedAt", AdminRoleResponse::updatedAt
+        );
     }
 
     @Transactional
@@ -153,10 +214,32 @@ public class AdminIdentityService {
 
     @Transactional(readOnly = true)
     public List<AdminPermissionResponse> listPermissions() {
-        return permissionRepository.findAll().stream()
-                .sorted(Comparator.comparing(AdminPermission::getCode))
+        return listPermissions(AdminListQuery.empty());
+    }
+
+    @Transactional(readOnly = true)
+    public List<AdminPermissionResponse> listPermissions(AdminListQuery query) {
+        List<AdminPermissionResponse> responses = permissionRepository.findAll().stream()
                 .map(this::toPermissionResponse)
                 .toList();
+        return AdminListQuerySupport.apply(responses, query, permission -> matchesPermissionListQuery(permission, query), permissionSorters(), "code");
+    }
+
+    private boolean matchesPermissionListQuery(AdminPermissionResponse permission, AdminListQuery query) {
+        return AdminListQuerySupport.containsAny(query.search(), permission.code(), permission.name(), permission.description())
+                && AdminListQuerySupport.contains(permission.code(), query.value("code"))
+                && AdminListQuerySupport.contains(permission.name(), query.value("name"))
+                && AdminListQuerySupport.contains(permission.description(), query.value("description"));
+    }
+
+    private Map<String, java.util.function.Function<AdminPermissionResponse, ?>> permissionSorters() {
+        return Map.of(
+                "code", AdminPermissionResponse::code,
+                "name", AdminPermissionResponse::name,
+                "description", AdminPermissionResponse::description,
+                "createdAt", AdminPermissionResponse::createdAt,
+                "updatedAt", AdminPermissionResponse::updatedAt
+        );
     }
 
     @Transactional
@@ -228,7 +311,11 @@ public class AdminIdentityService {
 
     private void applyUser(AdminUser user, AdminUserRequest request, boolean create) {
         user.setDisplayName(request.displayName().strip());
-        user.setTenantId(request.tenantId().strip());
+        String tenantId = tenantService.currentPrincipalIsSuperAdmin()
+            ? tenantService.normalizeTenantId(request.tenantId())
+            : tenantService.currentTenantId();
+        tenantService.ensureTenant(tenantId, tenantId);
+        user.setTenantId(tenantId);
         user.setEnabled(user.isSystemUser() || request.enabled() == null || request.enabled());
         if (StringUtils.hasText(request.password())) {
             user.setPasswordHash(passwordEncoder.encode(request.password()));

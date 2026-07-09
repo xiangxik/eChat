@@ -27,8 +27,9 @@ import {
   type AdminUser,
   type AdminUserRequest,
 } from '../api/admin';
+import { fetchAdminSession } from '../api/client';
 import { formatDate, renderEmpty } from './pageUtils';
-import { ADMIN_TABLE_SCROLL_Y, EnabledControl, ErrorAlert, PageSectionHeader } from './shared';
+import { AdminSearchPanel, buildListQuery, EnabledTag, ErrorAlert, PageSectionHeader, tableSort, type AdminTableSort } from './shared';
 
 export function IdentityPage() {
   const { message } = AntApp.useApp();
@@ -42,15 +43,28 @@ export function IdentityPage() {
   const [userDrawerOpen, setUserDrawerOpen] = useState(false);
   const [roleDrawerOpen, setRoleDrawerOpen] = useState(false);
   const [permissionDrawerOpen, setPermissionDrawerOpen] = useState(false);
+  const [userFilters, setUserFilters] = useState<Record<string, string | boolean>>({});
+  const [roleFilters, setRoleFilters] = useState<Record<string, string | boolean>>({});
+  const [permissionFilters, setPermissionFilters] = useState<Record<string, string>>({});
+  const [userSort, setUserSort] = useState<AdminTableSort>({});
+  const [roleSort, setRoleSort] = useState<AdminTableSort>({});
+  const [permissionSort, setPermissionSort] = useState<AdminTableSort>({});
 
-  const usersQuery = useQuery({ queryKey: ['admin-users'], queryFn: adminApi.listAdminUsers });
-  const rolesQuery = useQuery({ queryKey: ['admin-roles'], queryFn: adminApi.listAdminRoles });
-  const permissionsQuery = useQuery({ queryKey: ['admin-permissions'], queryFn: adminApi.listAdminPermissions });
+  const sessionQuery = useQuery({ queryKey: ['admin-session'], queryFn: fetchAdminSession, retry: false });
+  const showTenantControls = Boolean(sessionQuery.data?.superAdmin);
+  const userListQuery = buildListQuery(userFilters, userSort);
+  const roleListQuery = buildListQuery(roleFilters, roleSort);
+  const permissionListQuery = buildListQuery(permissionFilters, permissionSort);
+  const usersQuery = useQuery({ queryKey: ['admin-users', userListQuery], queryFn: () => adminApi.listAdminUsers(userListQuery) });
+  const rolesQuery = useQuery({ queryKey: ['admin-roles', roleListQuery], queryFn: () => adminApi.listAdminRoles(roleListQuery) });
+  const permissionsQuery = useQuery({ queryKey: ['admin-permissions', permissionListQuery], queryFn: () => adminApi.listAdminPermissions(permissionListQuery) });
+  const tenantsQuery = useQuery({ queryKey: ['tenants'], queryFn: adminApi.listTenants, enabled: showTenantControls });
 
   const invalidateIdentity = () => {
     void queryClient.invalidateQueries({ queryKey: ['admin-users'] });
     void queryClient.invalidateQueries({ queryKey: ['admin-roles'] });
     void queryClient.invalidateQueries({ queryKey: ['admin-permissions'] });
+    void queryClient.invalidateQueries({ queryKey: ['tenants'] });
   };
 
   const saveUserMutation = useMutation({
@@ -73,13 +87,6 @@ export function IdentityPage() {
       invalidateIdentity();
     },
     onError: (error) => message.error(error instanceof Error ? error.message : 'Delete failed'),
-  });
-
-  const updateUserMutation = useMutation({
-    mutationFn: ({ user, enabled }: { user: AdminUser; enabled: boolean }) =>
-      adminApi.updateAdminUser(user.id, { ...userToRequest(user), enabled }),
-    onSuccess: invalidateIdentity,
-    onError: (error) => message.error(error instanceof Error ? error.message : 'Update failed'),
   });
 
   const saveRoleMutation = useMutation({
@@ -131,7 +138,7 @@ export function IdentityPage() {
   const openCreateUser = () => {
     setEditingUser(undefined);
     userForm.resetFields();
-    userForm.setFieldsValue({ tenantId: 'default', enabled: true, roleIds: [] });
+    userForm.setFieldsValue({ tenantId: sessionQuery.data?.tenantId ?? 'default', enabled: true, roleIds: [] });
     setUserDrawerOpen(true);
   };
 
@@ -170,21 +177,23 @@ export function IdentityPage() {
   };
 
   const roleOptions = (rolesQuery.data ?? []).map((role) => ({ label: `${role.name} (${role.code})`, value: role.id }));
+  const tenantOptions = (tenantsQuery.data ?? []).map((tenant) => ({ label: `${tenant.name} (${tenant.tenantId})`, value: tenant.tenantId }));
   const permissionOptions = (permissionsQuery.data ?? []).map((permission) => ({
     label: `${permission.name} (${permission.code})`,
     value: permission.id,
   }));
 
   const userColumns: ColumnsType<AdminUser> = [
-    { title: 'Username', dataIndex: 'username', width: 190 },
-    { title: 'Display Name', dataIndex: 'displayName', width: 220 },
+    { title: 'Username', dataIndex: 'username', width: 165, sorter: true },
+    { title: 'Display Name', dataIndex: 'displayName', width: 175, sorter: true },
     {
       title: 'Type',
       dataIndex: 'systemUser',
-      width: 110,
+      width: 90,
+      sorter: true,
       render: (value) => (value ? <Tag color="gold">System</Tag> : <Tag>Custom</Tag>),
     },
-    { title: 'Tenant', dataIndex: 'tenantId', width: 160 },
+    ...(showTenantControls ? [{ title: 'Tenant', dataIndex: 'tenantId', width: 115, sorter: true }] : []),
     {
       title: 'Roles',
       dataIndex: 'roles',
@@ -193,24 +202,14 @@ export function IdentityPage() {
     {
       title: 'Status',
       dataIndex: 'enabled',
-      width: 170,
-      render: (enabled: boolean, user) => (
-        user.systemUser ? (
-          <Tag color="success">Enabled</Tag>
-        ) : (
-          <EnabledControl
-            enabled={enabled}
-            loading={updateUserMutation.isPending}
-            onChange={(checked) => updateUserMutation.mutate({ user, enabled: checked })}
-          />
-        )
-      ),
+      width: 72,
+      sorter: true,
+      render: (enabled: boolean) => <EnabledTag enabled={enabled} />,
     },
-    { title: 'Updated', dataIndex: 'updatedAt', width: 190, render: formatDate },
+    { title: 'Updated', dataIndex: 'updatedAt', width: 155, sorter: true, render: formatDate },
     {
       title: 'Actions',
-      width: 170,
-      fixed: 'right',
+      width: 140,
       render: (_, user) => (
         <Space>
           <Button size="small" onClick={() => openEditUser(user)}>
@@ -231,10 +230,10 @@ export function IdentityPage() {
   ];
 
   const roleColumns: ColumnsType<AdminRole> = [
-    { title: 'Code', dataIndex: 'code', width: 180, render: (value) => <Tag>{value}</Tag> },
-    { title: 'Name', dataIndex: 'name', width: 220 },
-    { title: 'Description', dataIndex: 'description', ellipsis: true, render: (value) => value || '-' },
-    { title: 'System', dataIndex: 'systemRole', width: 100, render: (value) => (value ? 'Yes' : 'No') },
+    { title: 'Code', dataIndex: 'code', width: 155, sorter: true, render: (value) => <Tag>{value}</Tag> },
+    { title: 'Name', dataIndex: 'name', width: 180, sorter: true },
+    { title: 'Description', dataIndex: 'description', ellipsis: true, sorter: true, render: (value) => value || '-' },
+    { title: 'System', dataIndex: 'systemRole', width: 100, sorter: true, render: (value) => (value ? 'Yes' : 'No') },
     {
       title: 'Permissions',
       dataIndex: 'permissions',
@@ -242,11 +241,10 @@ export function IdentityPage() {
       render: (permissions: AdminPermission[]) =>
         permissions.map((permission) => <Tag key={permission.id}>{permission.code}</Tag>),
     },
-    { title: 'Updated', dataIndex: 'updatedAt', width: 190, render: formatDate },
+    { title: 'Updated', dataIndex: 'updatedAt', width: 155, sorter: true, render: formatDate },
     {
       title: 'Actions',
-      width: 170,
-      fixed: 'right',
+      width: 140,
       render: (_, role) => (
         <Space>
           <Button size="small" onClick={() => openEditRole(role)}>
@@ -263,14 +261,13 @@ export function IdentityPage() {
   ];
 
   const permissionColumns: ColumnsType<AdminPermission> = [
-    { title: 'Code', dataIndex: 'code', width: 220, render: (value) => <Tag>{value}</Tag> },
-    { title: 'Name', dataIndex: 'name', width: 240 },
-    { title: 'Description', dataIndex: 'description', ellipsis: true, render: (value) => value || '-' },
-    { title: 'Updated', dataIndex: 'updatedAt', width: 190, render: formatDate },
+    { title: 'Code', dataIndex: 'code', width: 190, sorter: true, render: (value) => <Tag>{value}</Tag> },
+    { title: 'Name', dataIndex: 'name', width: 200, sorter: true },
+    { title: 'Description', dataIndex: 'description', ellipsis: true, sorter: true, render: (value) => value || '-' },
+    { title: 'Updated', dataIndex: 'updatedAt', width: 155, sorter: true, render: formatDate },
     {
       title: 'Actions',
-      width: 170,
-      fixed: 'right',
+      width: 140,
       render: (_, permission) => (
         <Space>
           <Button size="small" onClick={() => openEditPermission(permission)}>
@@ -288,7 +285,7 @@ export function IdentityPage() {
 
   return (
     <div className="page-stack">
-      <ErrorAlert error={usersQuery.error ?? rolesQuery.error ?? permissionsQuery.error} />
+      <ErrorAlert error={usersQuery.error ?? rolesQuery.error ?? permissionsQuery.error ?? tenantsQuery.error} />
       <Card className="admin-data-card">
         <Tabs
           items={[
@@ -297,6 +294,19 @@ export function IdentityPage() {
               label: 'Users',
               children: (
                 <>
+                  <AdminSearchPanel
+                    fields={[
+                      { name: 'search', label: 'Keyword' },
+                      ...(showTenantControls ? [{ name: 'tenantId', label: 'Tenant' }] : []),
+                      { name: 'username', label: 'Username' },
+                      { name: 'displayName', label: 'Display Name' },
+                      { name: 'role', label: 'Role' },
+                      { name: 'systemUser', label: 'Type', type: 'select', options: [{ label: 'System', value: true }, { label: 'Custom', value: false }] },
+                      { name: 'enabled', label: 'Status', type: 'select', options: [{ label: 'Enabled', value: true }, { label: 'Disabled', value: false }] },
+                    ]}
+                    initialValues={userFilters}
+                    onSearch={(values) => setUserFilters(values as Record<string, string | boolean>)}
+                  />
                   <PageSectionHeader
                     title="User Management"
                     actions={
@@ -313,7 +323,7 @@ export function IdentityPage() {
                     columns={userColumns}
                     locale={{ emptyText: renderEmpty('No admin users configured') }}
                     pagination={{ size: 'small' }}
-                    scroll={{ x: 1230, y: ADMIN_TABLE_SCROLL_Y }}
+                    onChange={(_, __, sorter) => setUserSort(tableSort(sorter))}
                   />
                 </>
               ),
@@ -323,6 +333,17 @@ export function IdentityPage() {
               label: 'Roles',
               children: (
                 <>
+                  <AdminSearchPanel
+                    fields={[
+                      { name: 'search', label: 'Keyword' },
+                      { name: 'code', label: 'Code' },
+                      { name: 'name', label: 'Name' },
+                      { name: 'permission', label: 'Permission' },
+                      { name: 'systemRole', label: 'Type', type: 'select', options: [{ label: 'System', value: true }, { label: 'Custom', value: false }] },
+                    ]}
+                    initialValues={roleFilters}
+                    onSearch={(values) => setRoleFilters(values as Record<string, string | boolean>)}
+                  />
                   <PageSectionHeader
                     title="Role Management"
                     actions={
@@ -339,7 +360,7 @@ export function IdentityPage() {
                     columns={roleColumns}
                     locale={{ emptyText: renderEmpty('No admin roles configured') }}
                     pagination={{ size: 'small' }}
-                    scroll={{ x: 1220, y: ADMIN_TABLE_SCROLL_Y }}
+                    onChange={(_, __, sorter) => setRoleSort(tableSort(sorter))}
                   />
                 </>
               ),
@@ -349,6 +370,16 @@ export function IdentityPage() {
               label: 'Permissions',
               children: (
                 <>
+                  <AdminSearchPanel
+                    fields={[
+                      { name: 'search', label: 'Keyword' },
+                      { name: 'code', label: 'Code' },
+                      { name: 'name', label: 'Name' },
+                      { name: 'description', label: 'Description' },
+                    ]}
+                    initialValues={permissionFilters}
+                    onSearch={(values) => setPermissionFilters(values as Record<string, string>)}
+                  />
                   <PageSectionHeader
                     title="Permission Management"
                     actions={
@@ -365,7 +396,7 @@ export function IdentityPage() {
                     columns={permissionColumns}
                     locale={{ emptyText: renderEmpty('No admin permissions configured') }}
                     pagination={{ size: 'small' }}
-                    scroll={{ x: 920, y: ADMIN_TABLE_SCROLL_Y }}
+                    onChange={(_, __, sorter) => setPermissionSort(tableSort(sorter))}
                   />
                 </>
               ),
@@ -403,9 +434,15 @@ export function IdentityPage() {
               placeholder={editingUser ? 'Leave blank to keep existing password' : 'Set an initial password'}
             />
           </Form.Item>
-          <Form.Item name="tenantId" label="Tenant ID" rules={[{ required: true, max: 160 }]}>
-            <Input placeholder="default" />
-          </Form.Item>
+          {showTenantControls ? (
+            <Form.Item name="tenantId" label="Tenant" rules={[{ required: true, max: 160 }]}>
+              <Select options={tenantOptions} loading={tenantsQuery.isLoading} showSearch optionFilterProp="label" />
+            </Form.Item>
+          ) : (
+            <Form.Item name="tenantId" hidden>
+              <Input />
+            </Form.Item>
+          )}
           <Form.Item name="roleIds" label="Roles">
             <Select
               mode="multiple"
@@ -477,6 +514,7 @@ export function IdentityPage() {
           </Form.Item>
         </Form>
       </Drawer>
+
     </div>
   );
 }

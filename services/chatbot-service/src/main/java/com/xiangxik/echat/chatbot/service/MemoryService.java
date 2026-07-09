@@ -41,24 +41,27 @@ public class MemoryService {
     private final ProviderConfigService providerConfigService;
     private final EmbeddingProviderClientRegistry embeddingClientRegistry;
     private final ChatbotProperties properties;
+    private final TenantService tenantService;
 
     public MemoryService(MemoryItemRepository memoryItemRepository,
                          ChatbotConfigRepository chatbotConfigRepository,
                          ModelConfigRepository modelConfigRepository,
                          ProviderConfigService providerConfigService,
                          EmbeddingProviderClientRegistry embeddingClientRegistry,
-                         ChatbotProperties properties) {
+                         ChatbotProperties properties,
+                         TenantService tenantService) {
         this.memoryItemRepository = memoryItemRepository;
         this.chatbotConfigRepository = chatbotConfigRepository;
         this.modelConfigRepository = modelConfigRepository;
         this.providerConfigService = providerConfigService;
         this.embeddingClientRegistry = embeddingClientRegistry;
         this.properties = properties;
+        this.tenantService = tenantService;
     }
 
     @Transactional(readOnly = true)
     public List<MemoryItemResponse> list(Long chatbotId, MemoryScope scope, String userId) {
-        return memoryItemRepository.findByChatbotIdOrderByUpdatedAtDesc(chatbotId).stream()
+        return memoryItemRepository.findByTenantIdAndChatbotIdOrderByUpdatedAtDesc(tenantService.currentTenantId(), chatbotId).stream()
                 .filter(item -> scope == null || item.getScope() == scope)
                 .filter(item -> !StringUtils.hasText(userId) || Objects.equals(userId, item.getUserId()))
                 .map(this::toResponse)
@@ -67,9 +70,10 @@ public class MemoryService {
 
     @Transactional
     public MemoryItemResponse create(MemoryItemRequest request) {
-        ChatbotConfig chatbot = chatbotConfigRepository.findById(request.chatbotId())
+        ChatbotConfig chatbot = chatbotConfigRepository.findByTenantIdAndId(tenantService.currentTenantId(), request.chatbotId())
                 .orElseThrow(() -> new ResourceNotFoundException("ChatbotConfig", request.chatbotId()));
         MemoryItem memoryItem = new MemoryItem();
+        memoryItem.setTenantId(chatbot.getTenantId());
         memoryItem.setChatbot(chatbot);
         apply(memoryItem, request);
         return toResponse(memoryItemRepository.save(memoryItem));
@@ -77,11 +81,12 @@ public class MemoryService {
 
     @Transactional
     public MemoryItemResponse update(Long id, MemoryItemRequest request) {
-        MemoryItem memoryItem = memoryItemRepository.findById(id)
+        MemoryItem memoryItem = memoryItemRepository.findByTenantIdAndId(tenantService.currentTenantId(), id)
                 .orElseThrow(() -> new ResourceNotFoundException("MemoryItem", id));
         if (!Objects.equals(memoryItem.getChatbot().getId(), request.chatbotId())) {
-            ChatbotConfig chatbot = chatbotConfigRepository.findById(request.chatbotId())
+            ChatbotConfig chatbot = chatbotConfigRepository.findByTenantIdAndId(tenantService.currentTenantId(), request.chatbotId())
                     .orElseThrow(() -> new ResourceNotFoundException("ChatbotConfig", request.chatbotId()));
+            memoryItem.setTenantId(chatbot.getTenantId());
             memoryItem.setChatbot(chatbot);
         }
         apply(memoryItem, request);
@@ -90,7 +95,7 @@ public class MemoryService {
 
     @Transactional
     public void delete(Long id) {
-        MemoryItem memoryItem = memoryItemRepository.findById(id)
+        MemoryItem memoryItem = memoryItemRepository.findByTenantIdAndId(tenantService.currentTenantId(), id)
                 .orElseThrow(() -> new ResourceNotFoundException("MemoryItem", id));
         memoryItemRepository.delete(memoryItem);
     }
@@ -115,9 +120,10 @@ public class MemoryService {
         }
         int requestedTopK = normalizeTopK(topK);
         double requestedMinScore = minScore == null ? 0 : minScore;
-        EmbeddingVector queryEmbedding = embed(query);
+        String tenantId = tenantIdForChatbot(chatbotId);
+        EmbeddingVector queryEmbedding = embed(query, tenantId);
         String vectorLiteral = toVectorLiteral(queryEmbedding.values());
-        List<MemoryItemSearchHit> hits = memoryItemRepository.searchLongTermByEmbedding(chatbotId, userId, vectorLiteral,
+        List<MemoryItemSearchHit> hits = memoryItemRepository.searchLongTermByEmbedding(tenantId, chatbotId, userId, vectorLiteral,
                 requestedMinScore, requestedTopK);
         if (hits.isEmpty()) {
             return List.of();
@@ -147,13 +153,13 @@ public class MemoryService {
             memoryItem.setEmbeddingDimension(null);
             return;
         }
-        EmbeddingVector embedding = embed(content);
+        EmbeddingVector embedding = embed(content, tenantService.currentTenantId());
         memoryItem.setEmbedding(embedding.values());
         memoryItem.setEmbeddingDimension(embedding.dimension());
     }
 
-    private EmbeddingVector embed(String input) {
-        ModelConfig model = resolveEmbeddingModel();
+    private EmbeddingVector embed(String input, String tenantId) {
+        ModelConfig model = resolveEmbeddingModel(tenantId);
         int expectedDimension = expectedDimension(model);
         if (expectedDimension != properties.context().embeddingDimension()) {
             throw new IllegalArgumentException("Embedding model dimension " + expectedDimension
@@ -169,8 +175,9 @@ public class MemoryService {
         return embedding;
     }
 
-    private ModelConfig resolveEmbeddingModel() {
-        return modelConfigRepository.findByEnabledTrueAndModelTypeOrderByDisplayNameAsc(ModelType.EMBEDDING).stream()
+    private ModelConfig resolveEmbeddingModel(String tenantId) {
+        return modelConfigRepository.findByProviderTenantIdAndEnabledTrueAndModelTypeOrderByDisplayNameAsc(
+                        tenantId, ModelType.EMBEDDING).stream()
                 .filter(model -> model.getProvider() != null && model.getProvider().isEnabled())
                 .findFirst()
                 .orElseThrow(() -> new IllegalArgumentException("No enabled EMBEDDING model configured"));
@@ -214,6 +221,12 @@ public class MemoryService {
         metadata.put("userId", item.getUserId());
         metadata.put("embeddingDimension", item.getEmbeddingDimension());
         return new ContextMemoryItem(item.getContent(), score, metadata);
+    }
+
+    private String tenantIdForChatbot(Long chatbotId) {
+        return chatbotConfigRepository.findById(chatbotId)
+                .map(ChatbotConfig::getTenantId)
+                .orElse(tenantService.currentTenantId());
     }
 
     private MemoryItemResponse toResponse(MemoryItem item) {

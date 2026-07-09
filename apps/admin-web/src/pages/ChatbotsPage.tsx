@@ -6,8 +6,9 @@ import { useNavigate } from 'react-router-dom';
 import type { ColumnsType } from 'antd/es/table';
 
 import { adminApi, type ChatbotConfig, type ChatbotConfigRequest } from '../api/admin';
+import { fetchAdminSession } from '../api/client';
 import { formatDate, renderEmpty } from './pageUtils';
-import { ADMIN_TABLE_SCROLL_Y, EnabledControl, ErrorAlert, PageSectionHeader } from './shared';
+import { AdminSearchPanel, buildListQuery, EnabledTag, ErrorAlert, PageSectionHeader, tableSort, type AdminTableSort } from './shared';
 
 export function ChatbotsPage() {
   const { message } = AntApp.useApp();
@@ -16,8 +17,12 @@ export function ChatbotsPage() {
   const [form] = Form.useForm<ChatbotConfigRequest>();
   const [editingChatbot, setEditingChatbot] = useState<ChatbotConfig>();
   const [drawerOpen, setDrawerOpen] = useState(false);
+  const [filters, setFilters] = useState<Record<string, string | boolean>>({});
+  const [sort, setSort] = useState<AdminTableSort>({});
+  const listQuery = buildListQuery(filters, sort);
 
-  const chatbotsQuery = useQuery({ queryKey: ['chatbots'], queryFn: adminApi.listChatbots });
+  const chatbotsQuery = useQuery({ queryKey: ['chatbots', listQuery], queryFn: () => adminApi.listChatbots(listQuery) });
+  const sessionQuery = useQuery({ queryKey: ['admin-session'], queryFn: fetchAdminSession, retry: false });
   const invalidateChatbots = () => queryClient.invalidateQueries({ queryKey: ['chatbots'] });
 
   const saveMutation = useMutation({
@@ -40,13 +45,6 @@ export function ChatbotsPage() {
     onError: (error) => message.error(error instanceof Error ? error.message : 'Delete failed'),
   });
 
-  const updateMutation = useMutation({
-    mutationFn: ({ chatbot, enabled }: { chatbot: ChatbotConfig; enabled: boolean }) =>
-      adminApi.updateChatbot(chatbot.id, normalizeChatbot({ ...chatbot, enabled })),
-    onSuccess: () => void invalidateChatbots(),
-    onError: (error) => message.error(error instanceof Error ? error.message : 'Update failed'),
-  });
-
   const openCreate = () => {
     setEditingChatbot(undefined);
     form.resetFields();
@@ -62,21 +60,20 @@ export function ChatbotsPage() {
   };
 
   const columns: ColumnsType<ChatbotConfig> = [
-    { title: 'Name', dataIndex: 'name', width: 220 },
-    { title: 'Description', dataIndex: 'description', ellipsis: true, render: (value?: string) => value || '-' },
+    ...(sessionQuery.data?.superAdmin ? [{ title: 'Tenant', dataIndex: 'tenantId', width: 120, sorter: true }] : []),
+    { title: 'Name', dataIndex: 'name', width: 180, sorter: true },
+    { title: 'Description', dataIndex: 'description', ellipsis: true, sorter: true, render: (value?: string) => value || '-' },
     {
       title: 'Status',
       dataIndex: 'enabled',
-      width: 170,
-      render: (enabled: boolean, chatbot) => (
-        <EnabledControl enabled={enabled} loading={updateMutation.isPending} onChange={(checked) => updateMutation.mutate({ chatbot, enabled: checked })} />
-      ),
+      width: 72,
+      sorter: true,
+      render: (enabled: boolean) => <EnabledTag enabled={enabled} />,
     },
-    { title: 'Updated', dataIndex: 'updatedAt', width: 190, render: formatDate },
+    { title: 'Updated', dataIndex: 'updatedAt', width: 155, sorter: true, render: formatDate },
     {
       title: 'Actions',
-      width: 250,
-      fixed: 'right',
+      width: 205,
       render: (_, chatbot) => (
         <Space>
           <Button size="small" onClick={() => navigate(`/chatbots/${chatbot.id}/workflow`)}>
@@ -98,6 +95,17 @@ export function ChatbotsPage() {
   return (
     <div className="page-stack">
       <ErrorAlert error={chatbotsQuery.error} />
+      <AdminSearchPanel
+        fields={[
+          { name: 'search', label: 'Keyword' },
+          ...(sessionQuery.data?.superAdmin ? [{ name: 'tenantId', label: 'Tenant' }] : []),
+          { name: 'name', label: 'Name' },
+          { name: 'description', label: 'Description' },
+          { name: 'enabled', label: 'Status', type: 'select', options: [{ label: 'Enabled', value: true }, { label: 'Disabled', value: false }] },
+        ]}
+        initialValues={filters}
+        onSearch={(values) => setFilters(values as Record<string, string | boolean>)}
+      />
       <Card className="admin-data-card">
         <PageSectionHeader
           title="Chatbot Management"
@@ -115,7 +123,7 @@ export function ChatbotsPage() {
           columns={columns}
           locale={{ emptyText: renderEmpty('No chatbots configured') }}
           pagination={{ size: 'small' }}
-          scroll={{ x: 860, y: ADMIN_TABLE_SCROLL_Y }}
+          onChange={(_, __, sorter) => setSort(tableSort(sorter))}
         />
       </Card>
       <Drawer

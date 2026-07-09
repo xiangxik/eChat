@@ -1,7 +1,28 @@
 import { Empty } from 'antd';
 
-export function formatDate(value?: string) {
-  return value ? new Intl.DateTimeFormat(undefined, { dateStyle: 'medium', timeStyle: 'short' }).format(new Date(value)) : '-';
+function padDatePart(value: number) {
+  return String(value).padStart(2, '0');
+}
+
+export function formatDate(value?: string | number | Date) {
+  if (value === undefined || value === null || value === '') {
+    return '-';
+  }
+
+  const date = new Date(value);
+  if (Number.isNaN(date.getTime())) {
+    return '-';
+  }
+
+  return [
+    date.getFullYear(),
+    padDatePart(date.getMonth() + 1),
+    padDatePart(date.getDate()),
+  ].join('-') + ` ${[
+    padDatePart(date.getHours()),
+    padDatePart(date.getMinutes()),
+    padDatePart(date.getSeconds()),
+  ].join(':')}`;
 }
 
 export function renderEmpty(description = 'No data') {

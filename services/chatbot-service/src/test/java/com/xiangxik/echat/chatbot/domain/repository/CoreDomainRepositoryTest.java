@@ -28,6 +28,8 @@ import static org.assertj.core.api.Assertions.assertThat;
 @Transactional
 class CoreDomainRepositoryTest extends PostgresIntegrationTest {
 
+    private static final String TENANT_ID = "tenant-a";
+
     @Autowired
     private ProviderConfigRepository providerConfigRepository;
 
@@ -53,6 +55,7 @@ class CoreDomainRepositoryTest extends PostgresIntegrationTest {
     void persistsCoreChatbotGraphAndQueryMethods() {
         String suffix = UUID.randomUUID().toString();
         ProviderConfig provider = new ProviderConfig();
+        provider.setTenantId(TENANT_ID);
         provider.setName("Anthropic " + suffix);
         provider.setType(ProviderType.ANTHROPIC);
         provider.setBaseUrl("https://api.anthropic.com");
@@ -70,6 +73,7 @@ class CoreDomainRepositoryTest extends PostgresIntegrationTest {
         model = modelConfigRepository.save(model);
 
         ChatbotConfig chatbot = new ChatbotConfig();
+        chatbot.setTenantId(TENANT_ID);
         chatbot.setName("Support Bot " + suffix);
         chatbot = chatbotConfigRepository.save(chatbot);
 
@@ -92,6 +96,7 @@ class CoreDomainRepositoryTest extends PostgresIntegrationTest {
         workflowNodeRepository.save(node);
 
         Conversation conversation = new Conversation();
+        conversation.setTenantId(TENANT_ID);
         conversation.setChatbot(chatbot);
         conversation.setCurrentWorkflowNode(node);
         conversation.setUserId("user-1");
@@ -106,6 +111,7 @@ class CoreDomainRepositoryTest extends PostgresIntegrationTest {
         message = messageRepository.save(message);
 
         MemoryItem memoryItem = new MemoryItem();
+        memoryItem.setTenantId(TENANT_ID);
         memoryItem.setChatbot(chatbot);
         memoryItem.setUserId("user-1");
         memoryItem.setScope(MemoryScope.LONG_TERM);
@@ -114,11 +120,11 @@ class CoreDomainRepositoryTest extends PostgresIntegrationTest {
 
         assertThat(modelConfigRepository.findByProviderIdAndModelName(provider.getId(), "claude-sonnet-4"))
                 .contains(model);
-        assertThat(chatbotConfigRepository.findByEnabledTrueOrderByNameAsc()).contains(chatbot);
-        assertThat(conversationRepository.findByChatbotIdAndStatusOrderByUpdatedAtDesc(chatbot.getId(), ConversationStatus.ACTIVE))
+        assertThat(chatbotConfigRepository.findByTenantIdAndEnabledTrueOrderByNameAsc(TENANT_ID)).contains(chatbot);
+        assertThat(conversationRepository.findByTenantIdAndChatbotIdAndStatusOrderByUpdatedAtDesc(TENANT_ID, chatbot.getId(), ConversationStatus.ACTIVE))
                 .contains(conversation);
         assertThat(messageRepository.findByConversationIdOrderByCreatedAtAsc(conversation.getId())).containsExactly(message);
-        assertThat(memoryItemRepository.findByChatbotIdAndScopeOrderByUpdatedAtDesc(chatbot.getId(), MemoryScope.LONG_TERM))
+        assertThat(memoryItemRepository.findByTenantIdAndChatbotIdAndScopeOrderByUpdatedAtDesc(TENANT_ID, chatbot.getId(), MemoryScope.LONG_TERM))
                 .contains(memoryItem);
     }
 }

@@ -10,7 +10,14 @@ public interface ModelConfigRepository extends JpaRepository<ModelConfig, Long> 
 
     Optional<ModelConfig> findByProviderIdAndModelName(Long providerId, String modelName);
 
+    Optional<ModelConfig> findByProviderTenantIdAndId(String tenantId, Long id);
+
     List<ModelConfig> findByProviderIdOrderByDisplayNameAsc(Long providerId);
 
-    List<ModelConfig> findByEnabledTrueAndModelTypeOrderByDisplayNameAsc(ModelType modelType);
+    List<ModelConfig> findByProviderTenantIdOrderByDisplayNameAsc(String tenantId);
+
+    List<ModelConfig> findByProviderTenantIdAndProviderIdOrderByDisplayNameAsc(String tenantId, Long providerId);
+
+    List<ModelConfig> findByProviderTenantIdAndEnabledTrueAndModelTypeOrderByDisplayNameAsc(String tenantId,
+                                                                                            ModelType modelType);
 }

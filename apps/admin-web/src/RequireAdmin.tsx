@@ -3,7 +3,7 @@ import { useQuery } from '@tanstack/react-query';
 import type { ReactNode } from 'react';
 import { Navigate, useLocation } from 'react-router-dom';
 
-import { fetchAdminSession } from './api/client';
+import { fetchAdminSession, writeSelectedAdminTenantId } from './api/client';
 
 interface RequireAdminProps {
   children: ReactNode;
@@ -27,6 +27,10 @@ export function RequireAdmin({ children }: RequireAdminProps) {
 
   if (sessionQuery.isError || !sessionQuery.data?.authenticated) {
     return <Navigate to="/login" replace state={{ from: location }} />;
+  }
+
+  if (!sessionQuery.data.superAdmin && sessionQuery.data.tenantId) {
+    writeSelectedAdminTenantId(sessionQuery.data.tenantId);
   }
 
   return children;

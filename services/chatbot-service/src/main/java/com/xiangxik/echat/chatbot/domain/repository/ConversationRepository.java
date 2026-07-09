@@ -12,12 +12,15 @@ import org.springframework.data.repository.query.Param;
 public interface ConversationRepository extends JpaRepository<Conversation, Long> {
 
     @EntityGraph(attributePaths = {"chatbot", "currentWorkflowNode"})
-    @Query("select conversation from Conversation conversation where conversation.id = :id")
-    Optional<Conversation> findByIdWithChatbotAndWorkflowNode(@Param("id") Long id);
+    @Query("select conversation from Conversation conversation where conversation.tenantId = :tenantId and conversation.id = :id")
+    Optional<Conversation> findByTenantIdAndIdWithChatbotAndWorkflowNode(@Param("tenantId") String tenantId,
+                                                                         @Param("id") Long id);
 
-    List<Conversation> findByChatbotIdAndStatusOrderByUpdatedAtDesc(Long chatbotId, ConversationStatus status);
+    List<Conversation> findByTenantIdAndChatbotIdAndStatusOrderByUpdatedAtDesc(String tenantId, Long chatbotId,
+                                                                                ConversationStatus status);
 
-    List<Conversation> findByUserIdOrderByUpdatedAtDesc(String userId);
+    List<Conversation> findByTenantIdAndUserIdOrderByUpdatedAtDesc(String tenantId, String userId);
 
-    List<Conversation> findByAnonymousSessionIdOrderByUpdatedAtDesc(String anonymousSessionId);
+    List<Conversation> findByTenantIdAndAnonymousSessionIdOrderByUpdatedAtDesc(String tenantId,
+                                                                               String anonymousSessionId);
 }

@@ -4,6 +4,7 @@ import com.xiangxik.echat.chatbot.api.dto.AdminLoginRequest;
 import com.xiangxik.echat.chatbot.api.dto.AdminLoginResult;
 import com.xiangxik.echat.chatbot.api.dto.AdminSessionResponse;
 import com.xiangxik.echat.chatbot.config.ChatbotProperties;
+import com.xiangxik.echat.chatbot.security.AdminPrincipal;
 import com.xiangxik.echat.chatbot.service.AdminIdentityService;
 import io.swagger.v3.oas.annotations.Operation;
 import io.swagger.v3.oas.annotations.tags.Tag;
@@ -15,6 +16,8 @@ import java.util.Optional;
 import org.springframework.http.HttpHeaders;
 import org.springframework.http.ResponseCookie;
 import org.springframework.http.HttpStatus;
+import org.springframework.security.core.Authentication;
+import org.springframework.security.core.context.SecurityContextHolder;
 import org.springframework.web.bind.annotation.GetMapping;
 import org.springframework.web.bind.annotation.PostMapping;
 import org.springframework.web.bind.annotation.RequestBody;
@@ -50,14 +53,14 @@ public class AdminAuthController {
         Optional<AdminLoginResult> userLogin = adminIdentityService.authenticate(request.username(), password);
         if (userLogin.isPresent()) {
             response.addHeader(HttpHeaders.SET_COOKIE, sessionCookie(userLogin.get().sessionToken(), SESSION_MAX_AGE).toString());
-            return new AdminSessionResponse(true);
+            return AdminSessionResponse.basicAuthenticated();
         }
         if (!adminTokenVerifier.matches(properties.security().adminToken(), password)) {
             throw new ResponseStatusException(HttpStatus.UNAUTHORIZED, "Missing or invalid admin credentials");
         }
 
         response.addHeader(HttpHeaders.SET_COOKIE, sessionCookie(password, SESSION_MAX_AGE).toString());
-        return new AdminSessionResponse(true);
+        return AdminSessionResponse.basicAuthenticated();
     }
 
     @PostMapping("/logout")
@@ -71,7 +74,12 @@ public class AdminAuthController {
     @GetMapping("/session")
     @Operation(summary = "Read the current admin session")
     public AdminSessionResponse session() {
-        return new AdminSessionResponse(true);
+        Authentication authentication = SecurityContextHolder.getContext().getAuthentication();
+        if (authentication != null && authentication.getPrincipal() instanceof AdminPrincipal principal) {
+            return AdminSessionResponse.authenticated(principal.actorId(), principal.displayName(), principal.tenantId(),
+                    principal.roles());
+        }
+        return AdminSessionResponse.basicAuthenticated();
     }
 
     private ResponseCookie sessionCookie(String value, Duration maxAge) {

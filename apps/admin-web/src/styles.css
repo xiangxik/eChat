@@ -124,11 +124,25 @@ body {
   flex-direction: column;
   min-width: 0;
   min-height: 0;
-  overflow: hidden;
+  overflow: auto;
 }
 
 .admin-content > * {
   min-height: 0;
+}
+
+.admin-topbar {
+  height: 48px;
+  display: flex;
+  align-items: center;
+  justify-content: flex-end;
+  padding: 0 12px;
+  border-bottom: 1px solid #e5e7eb;
+  background: #fff;
+}
+
+.tenant-select {
+  width: 260px;
 }
 
 .admin-sidebar-footer .ant-btn {
@@ -193,6 +207,35 @@ body {
   flex-shrink: 0;
 }
 
+.admin-search-card {
+  flex-shrink: 0;
+  padding: 8px;
+  border: 1px solid #e6eaf0;
+  border-radius: 8px;
+  background: #fbfdff;
+}
+
+.admin-search-card .ant-form {
+  row-gap: 8px;
+}
+
+.admin-search-item .ant-form-item-control-input-content {
+  display: flex;
+}
+
+.admin-search-input {
+  width: 180px;
+}
+
+.admin-search-select {
+  width: 180px;
+  min-width: 180px;
+}
+
+.admin-search-select .ant-select-selector {
+  width: 100%;
+}
+
 .section-header {
   display: flex;
   align-items: center;
@@ -247,12 +290,38 @@ body {
   min-height: 0;
 }
 
-.admin-data-card .ant-table-body {
-  scrollbar-gutter: stable;
+.admin-data-card .ant-table-container,
+.admin-data-card .ant-table-content,
+.eval-card .ant-table-container,
+.eval-card .ant-table-content,
+.readiness-card .ant-table-container,
+.readiness-card .ant-table-content {
+  overflow: visible !important;
 }
 
-.enabled-control {
-  white-space: nowrap;
+.ant-table-wrapper table {
+  table-layout: auto !important;
+}
+
+.ant-table-thead > tr > th,
+.ant-table-tbody > tr > td {
+  overflow-wrap: anywhere;
+}
+
+.ant-table-tbody > tr > td .ant-space {
+  row-gap: 4px;
+  flex-wrap: wrap;
+}
+
+.status-icon-tag {
+  min-width: 24px;
+  margin-inline-end: 0;
+  padding-inline: 5px;
+  text-align: center;
+}
+
+.status-icon-tag .anticon {
+  margin-inline-end: 0;
 }
 
 .dashboard-metric-grid {
@@ -483,14 +552,14 @@ body {
   flex: 1;
   min-height: 0;
   display: grid;
-  grid-template-columns: minmax(420px, 0.92fr) minmax(520px, 1.08fr);
+  grid-template-columns: minmax(360px, 0.9fr) minmax(420px, 1.1fr);
   gap: 8px;
 }
 
 .eval-main-panels {
   min-height: 0;
   display: grid;
-  grid-template-rows: minmax(0, 1fr) minmax(0, 1fr);
+  grid-template-rows: auto auto;
   gap: 8px;
 }
 

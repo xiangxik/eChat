@@ -20,6 +20,7 @@ const IdentityPage = lazy(() => import('./pages/IdentityPage').then((module) => 
 const LoginPage = lazy(() => import('./pages/LoginPage').then((module) => ({ default: module.LoginPage })));
 const ModelsPage = lazy(() => import('./pages/ModelsPage').then((module) => ({ default: module.ModelsPage })));
 const ProvidersPage = lazy(() => import('./pages/ProvidersPage').then((module) => ({ default: module.ProvidersPage })));
+const TenantsPage = lazy(() => import('./pages/TenantsPage').then((module) => ({ default: module.TenantsPage })));
 
 function lazyPage(element: React.ReactNode) {
   return <Suspense fallback={null}>{element}</Suspense>;
@@ -46,6 +47,7 @@ const router = createBrowserRouter([
       { path: 'chatbots', element: lazyPage(<ChatbotsPage />) },
       { path: 'chatbots/:chatbotId/workflow', element: lazyPage(<ChatbotWorkflowPage />) },
       { path: 'evals', element: lazyPage(<EvalsPage />) },
+      { path: 'tenants', element: lazyPage(<TenantsPage />) },
       { path: 'identity', element: lazyPage(<IdentityPage />) },
       { path: 'audit-logs', element: lazyPage(<AuditLogsPage />) },
     ],

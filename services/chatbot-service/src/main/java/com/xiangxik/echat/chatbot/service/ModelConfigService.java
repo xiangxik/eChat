@@ -12,6 +12,7 @@ import com.xiangxik.echat.chatbot.service.llm.LlmProviderClient;
 import com.xiangxik.echat.chatbot.service.llm.LlmProviderClientRegistry;
 import com.xiangxik.echat.chatbot.service.llm.LlmProviderTestResult;
 import java.util.List;
+import java.util.Map;
 import org.springframework.stereotype.Service;
 import org.springframework.transaction.annotation.Transactional;
 
@@ -24,25 +25,67 @@ public class ModelConfigService {
     private final ProviderModelDiscoveryService providerModelDiscoveryService;
     private final LlmProviderClientRegistry clientRegistry;
     private final AuditLogService auditLogService;
+    private final TenantService tenantService;
 
     public ModelConfigService(ModelConfigRepository modelConfigRepository,
                               ProviderConfigRepository providerConfigRepository,
                               ProviderConfigService providerConfigService,
                               ProviderModelDiscoveryService providerModelDiscoveryService,
                               LlmProviderClientRegistry clientRegistry,
-                              AuditLogService auditLogService) {
+                              AuditLogService auditLogService,
+                              TenantService tenantService) {
         this.modelConfigRepository = modelConfigRepository;
         this.providerConfigRepository = providerConfigRepository;
         this.providerConfigService = providerConfigService;
         this.providerModelDiscoveryService = providerModelDiscoveryService;
         this.clientRegistry = clientRegistry;
         this.auditLogService = auditLogService;
+        this.tenantService = tenantService;
     }
 
     @Transactional(readOnly = true)
     public List<ModelConfigResponse> list() {
-        return modelConfigRepository.findAll().stream().map(this::toResponse).toList();
+        return list(AdminListQuery.empty());
+        }
+
+        @Transactional(readOnly = true)
+        public List<ModelConfigResponse> list(AdminListQuery query) {
+        return modelConfigRepository.findByProviderTenantIdOrderByDisplayNameAsc(tenantService.currentTenantId()).stream()
+                .map(this::toResponse)
+            .filter(model -> matchesListQuery(model, query))
+            .collect(java.util.stream.Collectors.collectingAndThen(java.util.stream.Collectors.toList(),
+                models -> AdminListQuerySupport.apply(models, query, model -> true, modelSorters(), "displayName")))
+            .stream()
+                .toList();
     }
+
+        private boolean matchesListQuery(ModelConfigResponse model, AdminListQuery query) {
+        return AdminListQuerySupport.containsAny(query.search(), model.tenantId(), model.providerName(),
+            model.displayName(), model.modelName(), model.modelType(), model.enabled() ? "enabled" : "disabled",
+            model.supportsStreaming() ? "streaming" : "non streaming")
+            && AdminListQuerySupport.contains(model.tenantId(), query.value("tenantId"))
+            && AdminListQuerySupport.contains(model.providerName(), query.value("providerName"))
+            && AdminListQuerySupport.contains(model.displayName(), query.value("displayName"))
+            && AdminListQuerySupport.contains(model.modelName(), query.value("modelName"))
+            && AdminListQuerySupport.equalsText(model.modelType(), query.value("modelType"))
+            && AdminListQuerySupport.equalsBoolean(model.supportsStreaming(), query.booleanValue("supportsStreaming"))
+            && AdminListQuerySupport.equalsBoolean(model.enabled(), query.booleanValue("enabled"));
+        }
+
+        private Map<String, java.util.function.Function<ModelConfigResponse, ?>> modelSorters() {
+        return Map.ofEntries(
+            Map.entry("tenantId", ModelConfigResponse::tenantId),
+            Map.entry("providerName", ModelConfigResponse::providerName),
+            Map.entry("displayName", ModelConfigResponse::displayName),
+            Map.entry("modelName", ModelConfigResponse::modelName),
+            Map.entry("modelType", ModelConfigResponse::modelType),
+            Map.entry("maxContextTokens", ModelConfigResponse::maxContextTokens),
+            Map.entry("defaultTemperature", ModelConfigResponse::defaultTemperature),
+            Map.entry("defaultTopP", ModelConfigResponse::defaultTopP),
+            Map.entry("supportsStreaming", ModelConfigResponse::supportsStreaming),
+            Map.entry("enabled", ModelConfigResponse::enabled)
+        );
+        }
 
     @Transactional(readOnly = true)
     public ModelConfigResponse get(Long id) {
@@ -51,7 +94,7 @@ public class ModelConfigService {
 
         @Transactional(readOnly = true)
         public List<ModelOptionResponse> listOptions(Long providerId) {
-        ProviderConfig provider = providerConfigRepository.findById(providerId)
+        ProviderConfig provider = providerConfigRepository.findByTenantIdAndId(tenantService.currentTenantId(), providerId)
             .orElseThrow(() -> new ResourceNotFoundException("ProviderConfig", providerId));
             return providerModelDiscoveryService.listModels(provider, providerConfigService.decryptedApiKey(provider));
         }
@@ -102,12 +145,12 @@ public class ModelConfigService {
     }
 
     private ModelConfig find(Long id) {
-        return modelConfigRepository.findById(id)
+        return modelConfigRepository.findByProviderTenantIdAndId(tenantService.currentTenantId(), id)
                 .orElseThrow(() -> new ResourceNotFoundException("ModelConfig", id));
     }
 
     private void apply(ModelConfig modelConfig, ModelConfigRequest request) {
-        ProviderConfig provider = providerConfigRepository.findById(request.providerId())
+        ProviderConfig provider = providerConfigRepository.findByTenantIdAndId(tenantService.currentTenantId(), request.providerId())
                 .orElseThrow(() -> new ResourceNotFoundException("ProviderConfig", request.providerId()));
         modelConfig.setProvider(provider);
         modelConfig.setDisplayName(request.displayName());
@@ -128,6 +171,7 @@ public class ModelConfigService {
     private ModelConfigResponse toResponse(ModelConfig modelConfig) {
         return new ModelConfigResponse(
                 modelConfig.getId(),
+            modelConfig.getProvider().getTenantId(),
                 modelConfig.getProvider().getId(),
                 modelConfig.getProvider().getName(),
                 modelConfig.getDisplayName(),

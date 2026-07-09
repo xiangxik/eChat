@@ -1,6 +1,6 @@
 spring:
   datasource:
-    url: jdbc:postgresql://${TEST_DB_HOST:${DB_HOST:localhost}}:${TEST_DB_PORT:${DB_PORT:5432}}/${TEST_DB_NAME:${DB_NAME:echat}}?currentSchema=${TEST_DB_SCHEMA:echat_test},public
+    url: jdbc:postgresql://${TEST_DB_HOST:${DB_HOST:localhost}}:${TEST_DB_PORT:${DB_PORT:5432}}/${TEST_DB_NAME:${DB_NAME:echat}}?currentSchema=${TEST_DB_SCHEMA:echat_test},public&prepareThreshold=0
     username: ${TEST_DB_USERNAME:${DB_USERNAME:echat}}
     password: ${TEST_DB_PASSWORD:${DB_PASSWORD:change-me-local-postgres}}
   flyway:

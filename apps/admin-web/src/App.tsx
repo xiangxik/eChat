@@ -1,5 +1,6 @@
 import {
   ApiOutlined,
+  ApartmentOutlined,
   AppstoreOutlined,
   AuditOutlined,
   DashboardOutlined,
@@ -10,13 +11,14 @@ import {
   RobotOutlined,
   UserOutlined,
 } from '@ant-design/icons';
-import { Button, Layout, Menu, Typography, message } from 'antd';
-import { useQueryClient } from '@tanstack/react-query';
+import { Button, Layout, Menu, Select, Space, Typography, message } from 'antd';
+import { useQuery, useQueryClient } from '@tanstack/react-query';
 import { useEffect, useState } from 'react';
 import { Link, Outlet, useLocation, useNavigate } from 'react-router-dom';
 import { create } from 'zustand';
 
-import { logoutAdmin } from './api/client';
+import { adminApi } from './api/admin';
+import { fetchAdminSession, logoutAdmin, readSelectedAdminTenantId, writeSelectedAdminTenantId } from './api/client';
 
 const { Content, Sider } = Layout;
 const { Text } = Typography;
@@ -32,6 +34,7 @@ interface RouteItem {
   label: string;
   title: string;
   group?: string;
+  superAdminOnly?: boolean;
 }
 
 const useAdminUi = create<AdminUiState>((set) => ({
@@ -75,6 +78,14 @@ const routeItems: RouteItem[] = [
     group: 'Text Chat',
   },
   {
+    key: '/tenants',
+    icon: <ApartmentOutlined />,
+    label: 'Tenants',
+    title: 'Tenant Management',
+    group: 'System',
+    superAdminOnly: true,
+  },
+  {
     key: '/identity',
     icon: <SafetyCertificateOutlined />,
     label: 'Users & Roles',
@@ -90,55 +101,58 @@ const routeItems: RouteItem[] = [
   },
 ];
 
-const menuItems = [
-  {
-    key: '/dashboard',
-    icon: <DashboardOutlined />,
-    label: <Link to="/dashboard">Dashboard</Link>,
-  },
-  {
-    key: 'ai-configuration',
-    icon: <AppstoreOutlined />,
-    label: 'AI Config',
-    children: routeItems
-      .filter((item) => item.group === 'AI Config')
-      .map((item) => ({
-        key: item.key,
-        icon: item.icon,
-        label: <Link to={item.key}>{item.label}</Link>,
-      })),
-  },
-  {
-    key: 'text-chat',
-    icon: <MessageOutlined />,
-    label: 'Text Chat',
-    children: routeItems
-      .filter((item) => item.group === 'Text Chat')
-      .map((item) => ({
-        key: item.key,
-        icon: item.icon,
-        label: <Link to={item.key}>{item.label}</Link>,
-      })),
-  },
-  {
-    key: 'system',
-    icon: <SafetyCertificateOutlined />,
-    label: 'System',
-    children: routeItems
-      .filter((item) => item.group === 'System')
-      .map((item) => ({
-        key: item.key,
-        icon: item.icon,
-        label: <Link to={item.key}>{item.label}</Link>,
-      })),
-  },
-];
+function createMenuItems(visibleRouteItems: RouteItem[]) {
+  return [
+    {
+      key: '/dashboard',
+      icon: <DashboardOutlined />,
+      label: <Link to="/dashboard">Dashboard</Link>,
+    },
+    {
+      key: 'ai-configuration',
+      icon: <AppstoreOutlined />,
+      label: 'AI Config',
+      children: visibleRouteItems
+        .filter((item) => item.group === 'AI Config')
+        .map((item) => ({
+          key: item.key,
+          icon: item.icon,
+          label: <Link to={item.key}>{item.label}</Link>,
+        })),
+    },
+    {
+      key: 'text-chat',
+      icon: <MessageOutlined />,
+      label: 'Text Chat',
+      children: visibleRouteItems
+        .filter((item) => item.group === 'Text Chat')
+        .map((item) => ({
+          key: item.key,
+          icon: item.icon,
+          label: <Link to={item.key}>{item.label}</Link>,
+        })),
+    },
+    {
+      key: 'system',
+      icon: <SafetyCertificateOutlined />,
+      label: 'System',
+      children: visibleRouteItems
+        .filter((item) => item.group === 'System')
+        .map((item) => ({
+          key: item.key,
+          icon: item.icon,
+          label: <Link to={item.key}>{item.label}</Link>,
+        })),
+    },
+  ];
+}
 
 const sectionOpenKeysByRoute: Record<string, string> = {
   '/providers': 'ai-configuration',
   '/models': 'ai-configuration',
   '/chatbots': 'text-chat',
   '/evals': 'text-chat',
+  '/tenants': 'system',
   '/identity': 'system',
   '/audit-logs': 'system',
 };
@@ -151,7 +165,17 @@ export function App() {
   const [messageApi, contextHolder] = message.useMessage();
   const [loggingOut, setLoggingOut] = useState(false);
   const [openKeys, setOpenKeys] = useState<string[]>([]);
+  const [selectedTenantId, setSelectedTenantId] = useState(readSelectedAdminTenantId());
 
+  const sessionQuery = useQuery({ queryKey: ['admin-session'], queryFn: fetchAdminSession, retry: false });
+  const tenantsQuery = useQuery({
+    queryKey: ['tenants'],
+    queryFn: adminApi.listTenants,
+    enabled: Boolean(sessionQuery.data?.superAdmin),
+  });
+
+  const visibleRouteItems = routeItems.filter((item) => !item.superAdminOnly || sessionQuery.data?.superAdmin);
+  const menuItems = createMenuItems(visibleRouteItems);
   const currentRoute = routeItems.find((item) => location.pathname.startsWith(item.key)) ?? routeItems[0];
 
   useEffect(() => {
@@ -164,6 +188,26 @@ export function App() {
     setOpenKeys(sectionKey ? [sectionKey] : []);
   }, [collapsed, currentRoute.key]);
 
+  useEffect(() => {
+    if (!sessionQuery.data?.superAdmin || selectedTenantId || !sessionQuery.data.tenantId) {
+      return;
+    }
+    writeSelectedAdminTenantId(sessionQuery.data.tenantId);
+    setSelectedTenantId(sessionQuery.data.tenantId);
+  }, [selectedTenantId, sessionQuery.data]);
+
+  useEffect(() => {
+    if (!sessionQuery.data?.superAdmin || !tenantsQuery.data?.length) {
+      return;
+    }
+    const tenantExists = tenantsQuery.data.some((tenant) => tenant.tenantId === selectedTenantId);
+    if (!tenantExists) {
+      const nextTenantId = sessionQuery.data.tenantId ?? tenantsQuery.data[0].tenantId;
+      writeSelectedAdminTenantId(nextTenantId);
+      setSelectedTenantId(nextTenantId);
+    }
+  }, [selectedTenantId, sessionQuery.data, tenantsQuery.data]);
+
   async function handleLogout() {
     setLoggingOut(true);
     try {
@@ -175,6 +219,12 @@ export function App() {
     } finally {
       setLoggingOut(false);
     }
+  }
+
+  function handleTenantChange(tenantId: string) {
+    writeSelectedAdminTenantId(tenantId);
+    setSelectedTenantId(tenantId);
+    void queryClient.invalidateQueries({ predicate: (query) => query.queryKey[0] !== 'admin-session' });
   }
 
   return (
@@ -212,6 +262,23 @@ export function App() {
         </div>
       </Sider>
       <Layout>
+        {sessionQuery.data?.superAdmin && (
+          <div className="admin-topbar">
+            <Space size="small">
+              <Text type="secondary">Tenant</Text>
+              <Select
+                className="tenant-select"
+                value={selectedTenantId ?? sessionQuery.data.tenantId}
+                loading={tenantsQuery.isLoading}
+                options={(tenantsQuery.data ?? []).map((tenant) => ({
+                  label: `${tenant.name} (${tenant.tenantId})`,
+                  value: tenant.tenantId,
+                }))}
+                onChange={handleTenantChange}
+              />
+            </Space>
+          </div>
+        )}
         <Content className="admin-content">
           <Outlet />
         </Content>

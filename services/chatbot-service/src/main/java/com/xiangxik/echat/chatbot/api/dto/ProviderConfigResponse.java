@@ -7,6 +7,7 @@ import java.time.Instant;
 @Schema(description = "Provider configuration response without plaintext API keys")
 public record ProviderConfigResponse(
         Long id,
+        String tenantId,
         String name,
         ProviderType type,
         String baseUrl,

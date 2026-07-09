@@ -18,14 +18,55 @@ import org.springframework.util.StringUtils;
 public class AuditLogService {
 
     private final AuditLogRepository auditLogRepository;
+    private final TenantService tenantService;
 
-    public AuditLogService(AuditLogRepository auditLogRepository) {
+    public AuditLogService(AuditLogRepository auditLogRepository, TenantService tenantService) {
         this.auditLogRepository = auditLogRepository;
+        this.tenantService = tenantService;
     }
 
     @Transactional(readOnly = true)
     public List<AuditLogResponse> listRecent() {
-        return auditLogRepository.findTop100ByOrderByOccurredAtDesc().stream().map(this::toResponse).toList();
+        return listRecent(AdminListQuery.empty());
+    }
+
+    @Transactional(readOnly = true)
+    public List<AuditLogResponse> listRecent(AdminListQuery query) {
+        List<AuditLogResponse> auditLogs;
+        if (tenantService.currentPrincipalIsSuperAdmin()) {
+            auditLogs = auditLogRepository.findTop100ByOrderByOccurredAtDesc().stream().map(this::toResponse).toList();
+        } else {
+            auditLogs = auditLogRepository.findTop100ByTenantIdOrderByOccurredAtDesc(tenantService.currentTenantId()).stream()
+                    .map(this::toResponse)
+                    .toList();
+        }
+        return AdminListQuerySupport.apply(auditLogs, query, auditLog -> matchesListQuery(auditLog, query), auditLogSorters(), "occurredAt");
+    }
+
+    private boolean matchesListQuery(AuditLogResponse auditLog, AdminListQuery query) {
+        return AdminListQuerySupport.containsAny(query.search(), auditLog.tenantId(), auditLog.eventType(),
+                auditLog.resourceType(), auditLog.resourceId(), auditLog.actorType(), auditLog.actorId(),
+                auditLog.requestId(), auditLog.traceId(), auditLog.remoteAddress())
+                && AdminListQuerySupport.contains(auditLog.tenantId(), query.value("tenantId"))
+                && AdminListQuerySupport.contains(auditLog.eventType(), query.value("eventType"))
+                && AdminListQuerySupport.contains(auditLog.resourceType(), query.value("resourceType"))
+                && AdminListQuerySupport.contains(auditLog.actorId(), query.value("actorId"))
+                && AdminListQuerySupport.equalsText(auditLog.actorType(), query.value("actorType"));
+    }
+
+    private Map<String, java.util.function.Function<AuditLogResponse, ?>> auditLogSorters() {
+        return Map.ofEntries(
+                Map.entry("occurredAt", AuditLogResponse::occurredAt),
+                Map.entry("tenantId", AuditLogResponse::tenantId),
+                Map.entry("eventType", AuditLogResponse::eventType),
+                Map.entry("resourceType", AuditLogResponse::resourceType),
+                Map.entry("resourceId", AuditLogResponse::resourceId),
+                Map.entry("actorType", AuditLogResponse::actorType),
+                Map.entry("actorId", AuditLogResponse::actorId),
+                Map.entry("requestId", AuditLogResponse::requestId),
+                Map.entry("traceId", AuditLogResponse::traceId),
+                Map.entry("remoteAddress", AuditLogResponse::remoteAddress)
+        );
     }
 
     @Transactional
@@ -35,9 +76,9 @@ public class AuditLogService {
     }
 
     @Transactional
-    public void recordRuntime(String eventType, String resourceType, Object resourceId, String requestId, String traceId,
-                              String remoteAddress, Map<String, Object> metadata) {
-        record("RUNTIME", "chat", "default", eventType, resourceType, resourceId, requestId, traceId, remoteAddress,
+    public void recordRuntime(String tenantId, String eventType, String resourceType, Object resourceId,
+                              String requestId, String traceId, String remoteAddress, Map<String, Object> metadata) {
+        record("RUNTIME", "chat", tenantId, eventType, resourceType, resourceId, requestId, traceId, remoteAddress,
                 metadata);
     }
 

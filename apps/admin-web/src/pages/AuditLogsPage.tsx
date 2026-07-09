@@ -4,30 +4,41 @@ import { Button, Card, Descriptions, Space, Table, Tag, Typography } from 'antd'
 import type { ColumnsType } from 'antd/es/table';
 
 import { adminApi, type AuditLog } from '../api/admin';
-import { ADMIN_TABLE_SCROLL_Y, ErrorAlert, PageSectionHeader } from './shared';
+import { fetchAdminSession } from '../api/client';
+import { AdminSearchPanel, buildListQuery, ErrorAlert, PageSectionHeader, tableSort, type AdminTableSort } from './shared';
 import { formatDate, renderEmpty, stringifyJson } from './pageUtils';
+import { useState } from 'react';
 
 const { Paragraph, Text } = Typography;
 
 export function AuditLogsPage() {
-  const auditLogsQuery = useQuery({ queryKey: ['audit-logs'], queryFn: adminApi.listAuditLogs });
+  const [filters, setFilters] = useState<Record<string, string>>({});
+  const [sort, setSort] = useState<AdminTableSort>({ sortField: 'occurredAt', sortOrder: 'descend' });
+  const listQuery = buildListQuery(filters, sort);
+  const auditLogsQuery = useQuery({ queryKey: ['audit-logs', listQuery], queryFn: () => adminApi.listAuditLogs(listQuery) });
+  const sessionQuery = useQuery({ queryKey: ['admin-session'], queryFn: fetchAdminSession, retry: false });
   const auditLogs = auditLogsQuery.data ?? [];
+  const showTenant = Boolean(sessionQuery.data?.superAdmin);
 
   const columns: ColumnsType<AuditLog> = [
     {
       title: 'Time',
       dataIndex: 'occurredAt',
-      width: 190,
+      width: 155,
+      sorter: true,
       render: (value: string) => formatDate(value),
     },
     {
       title: 'Event',
       dataIndex: 'eventType',
-      width: 240,
+      width: 200,
+      sorter: true,
       render: (value: string) => <Tag color={value.includes('FAILED') ? 'error' : 'processing'}>{value}</Tag>,
     },
     {
       title: 'Resource',
+      dataIndex: 'resourceType',
+      sorter: true,
       render: (_, record) => (
         <Space direction="vertical" size={0}>
           <Text strong>{record.resourceType}</Text>
@@ -37,16 +48,20 @@ export function AuditLogsPage() {
     },
     {
       title: 'Actor',
+      dataIndex: 'actorId',
+      sorter: true,
       render: (_, record) => (
         <Space direction="vertical" size={0}>
           <Text>{record.actorType}</Text>
           <Text type="secondary">{record.actorId ?? '-'}</Text>
-          <Text type="secondary">tenant: {record.tenantId}</Text>
+          {showTenant && <Text type="secondary">tenant: {record.tenantId}</Text>}
         </Space>
       ),
     },
     {
       title: 'Trace',
+      dataIndex: 'requestId',
+      sorter: true,
       render: (_, record) => (
         <Space direction="vertical" size={0}>
           <Text copyable={Boolean(record.requestId)}>{record.requestId ?? '-'}</Text>
@@ -59,6 +74,18 @@ export function AuditLogsPage() {
   return (
     <div className="page-stack">
       <ErrorAlert error={auditLogsQuery.error} />
+      <AdminSearchPanel
+        fields={[
+          { name: 'search', label: 'Keyword' },
+          ...(showTenant ? [{ name: 'tenantId', label: 'Tenant' }] : []),
+          { name: 'eventType', label: 'Event' },
+          { name: 'resourceType', label: 'Resource' },
+          { name: 'actorType', label: 'Actor Type', type: 'select', options: [{ label: 'Admin', value: 'ADMIN' }, { label: 'Runtime', value: 'RUNTIME' }] },
+          { name: 'actorId', label: 'Actor' },
+        ]}
+        initialValues={filters}
+        onSearch={(values) => setFilters(values as Record<string, string>)}
+      />
 
       <Card className="admin-data-card">
         <PageSectionHeader
@@ -77,7 +104,7 @@ export function AuditLogsPage() {
           loading={auditLogsQuery.isLoading}
           locale={{ emptyText: renderEmpty('No audit logs yet') }}
           pagination={{ pageSize: 20, size: 'small' }}
-          scroll={{ x: 960, y: ADMIN_TABLE_SCROLL_Y }}
+          onChange={(_, __, sorter) => setSort(tableSort(sorter))}
           expandable={{
             expandedRowRender: (record) => (
               <Descriptions bordered size="small" column={1}>

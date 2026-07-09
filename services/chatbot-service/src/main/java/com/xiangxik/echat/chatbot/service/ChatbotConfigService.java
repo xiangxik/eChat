@@ -7,6 +7,7 @@ import com.xiangxik.echat.chatbot.domain.model.ChatbotWorkflowNode;
 import com.xiangxik.echat.chatbot.domain.repository.ChatbotConfigRepository;
 import com.xiangxik.echat.chatbot.domain.repository.ChatbotWorkflowNodeRepository;
 import java.util.List;
+import java.util.Map;
 import org.springframework.stereotype.Service;
 import org.springframework.transaction.annotation.Transactional;
 
@@ -16,19 +17,52 @@ public class ChatbotConfigService {
     private final ChatbotConfigRepository chatbotConfigRepository;
     private final ChatbotWorkflowNodeRepository workflowNodeRepository;
     private final AuditLogService auditLogService;
+    private final TenantService tenantService;
 
     public ChatbotConfigService(ChatbotConfigRepository chatbotConfigRepository,
                                 ChatbotWorkflowNodeRepository workflowNodeRepository,
-                                AuditLogService auditLogService) {
+                                AuditLogService auditLogService,
+                                TenantService tenantService) {
         this.chatbotConfigRepository = chatbotConfigRepository;
         this.workflowNodeRepository = workflowNodeRepository;
         this.auditLogService = auditLogService;
+        this.tenantService = tenantService;
     }
 
     @Transactional(readOnly = true)
     public List<ChatbotConfigResponse> list() {
-        return chatbotConfigRepository.findAll().stream().map(this::toResponse).toList();
+        return list(AdminListQuery.empty());
+        }
+
+        @Transactional(readOnly = true)
+        public List<ChatbotConfigResponse> list(AdminListQuery query) {
+        return chatbotConfigRepository.findByTenantIdOrderByNameAsc(tenantService.currentTenantId()).stream()
+                .map(this::toResponse)
+            .filter(chatbot -> matchesListQuery(chatbot, query))
+            .collect(java.util.stream.Collectors.collectingAndThen(java.util.stream.Collectors.toList(),
+                chatbots -> AdminListQuerySupport.apply(chatbots, query, chatbot -> true, chatbotSorters(), "name")))
+            .stream()
+                .toList();
     }
+
+        private boolean matchesListQuery(ChatbotConfigResponse chatbot, AdminListQuery query) {
+        return AdminListQuerySupport.containsAny(query.search(), chatbot.tenantId(), chatbot.name(),
+            chatbot.description(), chatbot.enabled() ? "enabled" : "disabled")
+            && AdminListQuerySupport.contains(chatbot.tenantId(), query.value("tenantId"))
+            && AdminListQuerySupport.contains(chatbot.name(), query.value("name"))
+            && AdminListQuerySupport.contains(chatbot.description(), query.value("description"))
+            && AdminListQuerySupport.equalsBoolean(chatbot.enabled(), query.booleanValue("enabled"));
+        }
+
+        private Map<String, java.util.function.Function<ChatbotConfigResponse, ?>> chatbotSorters() {
+        return Map.of(
+            "tenantId", ChatbotConfigResponse::tenantId,
+            "name", ChatbotConfigResponse::name,
+            "description", ChatbotConfigResponse::description,
+            "enabled", ChatbotConfigResponse::enabled,
+            "updatedAt", ChatbotConfigResponse::updatedAt
+        );
+        }
 
     @Transactional(readOnly = true)
     public ChatbotConfigResponse get(Long id) {
@@ -38,6 +72,7 @@ public class ChatbotConfigService {
     @Transactional
     public ChatbotConfigResponse create(ChatbotConfigRequest request) {
         ChatbotConfig chatbotConfig = new ChatbotConfig();
+        chatbotConfig.setTenantId(tenantService.currentTenantId());
         apply(chatbotConfig, request);
         ChatbotConfig saved = chatbotConfigRepository.save(chatbotConfig);
         ensureStartNode(saved);
@@ -62,7 +97,7 @@ public class ChatbotConfigService {
     }
 
     private ChatbotConfig find(Long id) {
-        return chatbotConfigRepository.findById(id)
+        return chatbotConfigRepository.findByTenantIdAndId(tenantService.currentTenantId(), id)
                 .orElseThrow(() -> new ResourceNotFoundException("ChatbotConfig", id));
     }
 
@@ -95,6 +130,7 @@ public class ChatbotConfigService {
     private ChatbotConfigResponse toResponse(ChatbotConfig chatbotConfig) {
         return new ChatbotConfigResponse(
                 chatbotConfig.getId(),
+            chatbotConfig.getTenantId(),
                 chatbotConfig.getName(),
                 chatbotConfig.getDescription(),
                 chatbotConfig.isEnabled(),
@@ -106,6 +142,7 @@ public class ChatbotConfigService {
     private java.util.Map<String, Object> auditMetadata(ChatbotConfig chatbotConfig) {
         java.util.Map<String, Object> metadata = new java.util.LinkedHashMap<>();
         metadata.put("name", chatbotConfig.getName());
+        metadata.put("tenantId", chatbotConfig.getTenantId());
         metadata.put("enabled", chatbotConfig.isEnabled());
         return metadata;
     }

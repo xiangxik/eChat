@@ -38,6 +38,7 @@ import static org.springframework.test.web.servlet.result.MockMvcResultMatchers.
 class ChatbotWorkflowAdminControllerTest extends PostgresIntegrationTest {
 
     private static final String ADMIN_TOKEN = "test-admin-token";
+    private static final String TENANT_ID = "tenant-a";
 
     private final ObjectMapper objectMapper = new ObjectMapper();
     private MockMvc mockMvc;
@@ -94,6 +95,7 @@ class ChatbotWorkflowAdminControllerTest extends PostgresIntegrationTest {
 
     private Long createChatbot() {
         ChatbotConfig chatbot = new ChatbotConfig();
+        chatbot.setTenantId(TENANT_ID);
         chatbot.setName("Workflow bot " + UUID.randomUUID());
         chatbot.setEnabled(true);
         return chatbotConfigRepository.saveAndFlush(chatbot).getId();
@@ -102,6 +104,7 @@ class ChatbotWorkflowAdminControllerTest extends PostgresIntegrationTest {
     private Long createModel() {
         String suffix = UUID.randomUUID().toString();
         ProviderConfig provider = new ProviderConfig();
+        provider.setTenantId(TENANT_ID);
         provider.setName("Workflow OpenAI " + suffix);
         provider.setType(ProviderType.OPENAI_COMPATIBLE);
         provider.setBaseUrl("http://localhost:8081/v1");
