@@ -1,5 +1,6 @@
 export interface RuntimeEnv {
   VITE_API_BASE_URL?: string;
+  VITE_CHAT_WEB_BASE_URL?: string;
 }
 
 declare global {

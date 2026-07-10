@@ -16,7 +16,7 @@ import {
   Tag,
   Tooltip,
 } from 'antd';
-import { useEffect, useState } from 'react';
+import { useEffect, useRef, useState } from 'react';
 import type { DragEvent as ReactDragEvent, PointerEvent as ReactPointerEvent } from 'react';
 import { useNavigate, useParams } from 'react-router-dom';
 
@@ -60,6 +60,8 @@ export function ChatbotWorkflowPage() {
   const [debugCurrentNodeKey, setDebugCurrentNodeKey] = useState<string>();
   const [debugMessages, setDebugMessages] = useState<ChatMessage[]>([]);
   const [debugInput, setDebugInput] = useState('');
+  const debugMessagesRef = useRef<HTMLDivElement>(null);
+  const debugOptimisticMessageIdRef = useRef(0);
   const [nodeForm] = Form.useForm<NodeFormValues>();
   const [transitionForm] = Form.useForm<TransitionFormValues>();
 
@@ -123,6 +125,14 @@ export function ChatbotWorkflowPage() {
     }
   }, [workflowQuery.data]);
 
+  useEffect(() => {
+    const messagesElement = debugMessagesRef.current;
+    if (!messagesElement) {
+      return;
+    }
+    messagesElement.scrollTop = messagesElement.scrollHeight;
+  }, [debugMessages]);
+
   const saveMutation = useMutation({
     mutationFn: () => adminApi.saveChatbotWorkflow(chatbotId, normalizeWorkflow({ chatbotId, nodes, transitions })),
     onSuccess: (workflow) => {
@@ -161,7 +171,7 @@ export function ChatbotWorkflowPage() {
   });
 
   const sendDebugMessageMutation = useMutation({
-    mutationFn: async (content: string) => {
+    mutationFn: async ({ content }: { content: string; optimisticMessageId: number }) => {
       const conversationId = debugConversationId ?? (await adminApi.createChatConversation({
         chatbotId,
         anonymousSessionId: `workflow-debug-${Date.now()}`,
@@ -170,12 +180,26 @@ export function ChatbotWorkflowPage() {
       setDebugConversationId(conversationId);
       return adminApi.sendChatMessage(conversationId, { message: content, metadata: { source: 'admin-workflow-debug' } });
     },
-    onSuccess: (response) => {
+    onSuccess: (response, variables) => {
+      setDebugConversationId(response.conversation.id);
       setDebugCurrentNodeKey(response.conversation.currentWorkflowNodeKey ?? undefined);
-      setDebugMessages((current) => [...current, response.userMessage, response.assistantMessage]);
-      setDebugInput('');
+      setDebugMessages((current) => {
+        let replacedOptimisticMessage = false;
+        const nextMessages = current.flatMap((item) => {
+          if (item.id !== variables.optimisticMessageId) {
+            return [item];
+          }
+          replacedOptimisticMessage = true;
+          return [response.userMessage, response.assistantMessage];
+        });
+        return replacedOptimisticMessage ? nextMessages : [...current, response.userMessage, response.assistantMessage];
+      });
     },
-    onError: (error) => message.error(error instanceof Error ? error.message : 'Debug message failed'),
+    onError: (error, variables) => {
+      setDebugMessages((current) => current.filter((item) => item.id !== variables.optimisticMessageId));
+      setDebugInput((current) => current || variables.content);
+      message.error(error instanceof Error ? error.message : 'Debug message failed');
+    },
   });
 
   const modelOptions = (modelsQuery.data ?? [])
@@ -365,10 +389,22 @@ export function ChatbotWorkflowPage() {
 
   const sendDebugMessage = () => {
     const content = debugInput.trim();
-    if (!content) {
+    if (!content || sendDebugMessageMutation.isPending) {
       return;
     }
-    sendDebugMessageMutation.mutate(content);
+    const optimisticMessageId = --debugOptimisticMessageIdRef.current;
+    setDebugMessages((current) => [
+      ...current,
+      {
+        id: optimisticMessageId,
+        conversationId: debugConversationId ?? 0,
+        role: 'USER',
+        content,
+        createdAt: new Date().toISOString(),
+      },
+    ]);
+    setDebugInput('');
+    sendDebugMessageMutation.mutate({ content, optimisticMessageId });
   };
 
   return (
@@ -500,7 +536,7 @@ export function ChatbotWorkflowPage() {
                   <Tag>{debugConversationId ? `#${debugConversationId}` : 'No session'}</Tag>
                   {debugCurrentNodeKey && <Tag color="blue">{debugCurrentNodeKey}</Tag>}
                 </Space>
-                <div className="workflow-debug-messages">
+                <div className="workflow-debug-messages" ref={debugMessagesRef}>
                   {debugMessages.length === 0 && <div className="workflow-empty">Save changes, then send a message.</div>}
                   {debugMessages.map((item) => (
                     <div key={item.id} className={`workflow-debug-message ${item.role === 'USER' ? 'is-user' : 'is-assistant'}`}>
@@ -509,21 +545,23 @@ export function ChatbotWorkflowPage() {
                     </div>
                   ))}
                 </div>
-                <Input.TextArea
-                  rows={3}
-                  value={debugInput}
-                  onChange={(event) => setDebugInput(event.target.value)}
-                  onPressEnter={(event) => {
-                    if (!event.shiftKey) {
-                      event.preventDefault();
-                      sendDebugMessage();
-                    }
-                  }}
-                  placeholder="Message"
-                />
-                <Button type="primary" block loading={sendDebugMessageMutation.isPending} onClick={sendDebugMessage}>
-                  Send
-                </Button>
+                <div className="workflow-debug-composer">
+                  <Input.TextArea
+                    rows={3}
+                    value={debugInput}
+                    onChange={(event) => setDebugInput(event.target.value)}
+                    onPressEnter={(event) => {
+                      if (!event.shiftKey) {
+                        event.preventDefault();
+                        sendDebugMessage();
+                      }
+                    }}
+                    placeholder="Message"
+                  />
+                  <Button type="primary" block loading={sendDebugMessageMutation.isPending} onClick={sendDebugMessage}>
+                    Send
+                  </Button>
+                </div>
               </div>
             </Card>
           </div>

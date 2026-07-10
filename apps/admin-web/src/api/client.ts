@@ -49,7 +49,8 @@ export async function apiRequest<T>(path: string, options: RequestInit = {}): Pr
   }
 
   const selectedTenantId = readSelectedAdminTenantId();
-  if (selectedTenantId && path.startsWith('/api/admin/') && !path.startsWith('/api/admin/auth/') && !headers.has('X-Tenant-Id')) {
+  const tenantScopedRequest = (path.startsWith('/api/admin/') && !path.startsWith('/api/admin/auth/')) || path.startsWith('/api/chat/');
+  if (selectedTenantId && tenantScopedRequest && !headers.has('X-Tenant-Id')) {
     headers.set('X-Tenant-Id', selectedTenantId);
   }
 

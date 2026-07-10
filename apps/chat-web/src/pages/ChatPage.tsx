@@ -1,4 +1,5 @@
 import { useQuery } from '@tanstack/react-query';
+import { useParams, useSearchParams } from 'react-router-dom';
 import { create } from 'zustand';
 
 import { fetchHealth } from '../api/client';
@@ -34,15 +35,19 @@ const useChatLocale = create<ChatLocaleState>((set) => ({
   },
 }));
 
-const chatbotId = Number.parseInt(readRuntimeEnv('VITE_CHATBOT_ID') ?? '1', 10);
-const chatbotName = readRuntimeEnv('VITE_CHATBOT_NAME') ?? 'eChat Assistant';
+const fallbackChatbotId = Number.parseInt(readRuntimeEnv('VITE_CHATBOT_ID') ?? '1', 10);
+const fallbackChatbotName = readRuntimeEnv('VITE_CHATBOT_NAME') ?? 'eChat Assistant';
 
 export function ChatPage() {
+  const params = useParams();
+  const [searchParams] = useSearchParams();
   const { draft, setDraft, clearDraft } = useChatDraft();
   const { locale, setLocale } = useChatLocale();
   const copy = chatCopy[locale];
+  const chatbotId = readChatbotId(params.chatbotId ?? searchParams.get('chatbotId'));
+  const chatbotName = searchParams.get('chatbotName')?.trim() || fallbackChatbotName;
   const healthQuery = useQuery({ queryKey: ['health'], queryFn: fetchHealth, retry: false });
-  const chatSession = useChatSession({ chatbotId: Number.isNaN(chatbotId) ? 1 : chatbotId, chatbotName });
+  const chatSession = useChatSession({ chatbotId, chatbotName });
   const apiOnline = healthQuery.data?.status === 'UP';
 
   async function handleSubmit() {
@@ -124,4 +129,12 @@ export function ChatPage() {
       </section>
     </main>
   );
+}
+
+function readChatbotId(value: string | null | undefined) {
+  const urlChatbotId = Number.parseInt(value ?? '', 10);
+  if (Number.isFinite(urlChatbotId) && urlChatbotId > 0) {
+    return urlChatbotId;
+  }
+  return Number.isNaN(fallbackChatbotId) ? 1 : fallbackChatbotId;
 }

@@ -139,11 +139,11 @@ export async function streamChatMessage(
 ): Promise<void> {
   const response = await fetch(`${apiBaseUrl}/api/chat/conversations/${conversationId}/stream`, {
     method: 'POST',
-    headers: {
+    headers: requestHeaders({
       ...jsonHeaders,
       Accept: 'text/event-stream',
       'X-Request-Id': options.requestId ?? createRequestId(),
-    },
+    }),
     body: JSON.stringify(request),
     signal: options.signal,
   });
@@ -172,7 +172,7 @@ export async function streamChatMessage(
 }
 
 async function requestJson<T>(path: string, init?: RequestInit): Promise<T> {
-  const response = await fetch(`${apiBaseUrl}${path}`, init);
+  const response = await fetch(`${apiBaseUrl}${path}`, { ...init, headers: requestHeaders(init?.headers) });
 
   if (!response.ok) {
     throw await toApiError(response);
@@ -260,4 +260,22 @@ function createRequestId(): string {
 
 function readString(value: unknown): string | undefined {
   return typeof value === 'string' && value.length > 0 ? value : undefined;
+}
+
+function requestHeaders(headersInit?: HeadersInit) {
+  const headers = new Headers(headersInit);
+  const tenantId = readUrlTenantId();
+  if (tenantId && !headers.has('X-Tenant-Id')) {
+    headers.set('X-Tenant-Id', tenantId);
+  }
+  return headers;
+}
+
+function readUrlTenantId() {
+  try {
+    const tenantId = new URLSearchParams(window.location.search).get('tenantId')?.trim();
+    return tenantId || undefined;
+  } catch {
+    return undefined;
+  }
 }

@@ -1,4 +1,4 @@
-import { PlusOutlined } from '@ant-design/icons';
+import { ExportOutlined, PlusOutlined } from '@ant-design/icons';
 import { useMutation, useQuery, useQueryClient } from '@tanstack/react-query';
 import { App as AntApp, Button, Card, Drawer, Form, Input, Popconfirm, Space, Switch, Table } from 'antd';
 import { useState } from 'react';
@@ -7,6 +7,7 @@ import type { ColumnsType } from 'antd/es/table';
 
 import { adminApi, type ChatbotConfig, type ChatbotConfigRequest } from '../api/admin';
 import { fetchAdminSession } from '../api/client';
+import { readRuntimeEnv } from '../runtimeEnv';
 import { formatDate, renderEmpty } from './pageUtils';
 import { AdminSearchPanel, buildListQuery, EnabledTag, ErrorAlert, PageSectionHeader, tableSort, type AdminTableSort } from './shared';
 
@@ -59,6 +60,10 @@ export function ChatbotsPage() {
     setDrawerOpen(true);
   };
 
+  const openChatbot = (chatbot: ChatbotConfig) => {
+    window.open(chatbotUrl(chatbot), '_blank', 'noopener,noreferrer');
+  };
+
   const columns: ColumnsType<ChatbotConfig> = [
     ...(sessionQuery.data?.superAdmin ? [{ title: 'Tenant', dataIndex: 'tenantId', width: 120, sorter: true }] : []),
     { title: 'Name', dataIndex: 'name', width: 180, sorter: true },
@@ -73,9 +78,12 @@ export function ChatbotsPage() {
     { title: 'Updated', dataIndex: 'updatedAt', width: 155, sorter: true, render: formatDate },
     {
       title: 'Actions',
-      width: 205,
+      width: 280,
       render: (_, chatbot) => (
         <Space>
+          <Button size="small" icon={<ExportOutlined />} onClick={() => openChatbot(chatbot)}>
+            Chat
+          </Button>
           <Button size="small" onClick={() => navigate(`/chatbots/${chatbot.id}/workflow`)}>
             Workflow
           </Button>
@@ -152,6 +160,23 @@ export function ChatbotsPage() {
       </Drawer>
     </div>
   );
+}
+
+function chatbotUrl(chatbot: ChatbotConfig) {
+  const url = new URL(readRuntimeEnv('VITE_CHAT_WEB_BASE_URL') ?? defaultChatWebBaseUrl(), window.location.origin);
+  url.searchParams.set('chatbotId', String(chatbot.id));
+  if (chatbot.tenantId) {
+    url.searchParams.set('tenantId', chatbot.tenantId);
+  }
+  return url.toString();
+}
+
+function defaultChatWebBaseUrl() {
+  const url = new URL(window.location.origin);
+  if (url.port === '5174') {
+    url.port = '5173';
+  }
+  return url.toString();
 }
 
 function normalizeChatbot(values: ChatbotConfigRequest): ChatbotConfigRequest {

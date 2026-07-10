@@ -13,6 +13,10 @@ const router = createBrowserRouter([
     path: '/',
     element: <ChatPage />,
   },
+  {
+    path: '/chatbots/:chatbotId',
+    element: <ChatPage />,
+  },
 ]);
 
 ReactDOM.createRoot(document.getElementById('root')!).render(

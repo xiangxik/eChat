@@ -107,7 +107,7 @@ cp .env.example .env
 docker compose up --build
 ```
 
-Compose starts PostgreSQL + pgvector 18, Redis, the Spring Boot backend, chat-web, and admin-web. The browser-facing API URL is controlled by `VITE_API_BASE_URL` in `.env`; for local Compose it should usually remain `http://localhost:8080`.
+Compose starts PostgreSQL + pgvector 18, Redis, the Spring Boot backend, chat-web, and admin-web. The browser-facing API URL is controlled by `VITE_API_BASE_URL` in `.env`; for local Compose it should usually remain `http://localhost:8080`. Admin links to chat-web use `VITE_CHAT_WEB_BASE_URL`, which defaults to `http://localhost:5173`.
 
 Default Compose URLs:
 
@@ -156,8 +156,8 @@ docker compose up --build
 4. In Models, create a `CHAT` model for that provider. Use the provider's model name, for example `gpt-4.1-mini`, enable streaming if the provider supports it, and save.
 5. In Chatbots, create an enabled chatbot, then open its Workflow editor.
 6. Select the built-in `Start` node, choose the chat model, edit the node Context Policy DSL if needed, then save the workflow.
-7. Set `VITE_CHATBOT_ID` in `.env` to that chatbot id if it is not `1`, then restart chat-web with `docker compose up -d --build chat-web`.
-8. Open `http://localhost:5173` and send a message.
+7. In Chatbots, use the row `Chat` action to open chat-web with that chatbot id in the URL.
+8. Send a message in the opened chat-web page.
 
 ## Smoke Test
 
